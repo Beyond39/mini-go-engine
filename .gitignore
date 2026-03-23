@@ -1,0 +1,12 @@
+test.txt
+
+*.exe
+*.o
+*.out
+*.dll
+build/
+cmake-build-*/
+
+.vscode/
+.idea/
+*.user
