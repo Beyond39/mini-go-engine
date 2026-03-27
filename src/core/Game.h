@@ -16,11 +16,25 @@ struct RecordMove{
 // 还有就是需要记录，暂时不去使用zobirsh hash 
 class Game {
 public :
-    // 对打劫进行判断 ， 最基础的判断方式
-    bool isKo(int x , int y , Stone color) ;
-    // 提供悔棋操作
-    bool undo(int x , int y , Stone color) ;
+    Game() ;
+    // 下棋
+    bool playMove(int x, int y);
+
+    // 悔棋
+    bool undo();
+
+    // 简单对打劫进行判断
+    bool isKo(int x, int y, Stone color) const;
+
+    // 获取当前棋盘
+    const Board& getBoard() const;
+
+    // 获取当前该谁下
+    Stone getCurrentPlayer() const;
 private:
-    std::vector<RecordMove> record ;
-    Board curborad ;
+    Board currentBoard;
+    Stone currentPlayer;
+    std::vector<RecordMove> history;
+
+    void switchPlayer();
 };
