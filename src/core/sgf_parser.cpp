@@ -40,7 +40,7 @@ std::vector<Move> SGFParser::parse(const std::string& filename){
             }
 
             // 防止格式错误
-            if (j < sgf.size()){
+            if (j >= sgf.size()){
                 break ;
             }
 

@@ -17,9 +17,9 @@ struct RecordMove{
 class Game {
 public :
     // 对打劫进行判断 ， 最基础的判断方式
-    bool isKo(int x , int y , Stone color){} ;
+    bool isKo(int x , int y , Stone color) ;
     // 提供悔棋操作
-    bool undo(int x , int y , Stone color){} ;
+    bool undo(int x , int y , Stone color) ;
 private:
     std::vector<RecordMove> record ;
     Board curborad ;

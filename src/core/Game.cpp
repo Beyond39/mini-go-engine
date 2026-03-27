@@ -5,42 +5,78 @@
 #include "Board.h"
 #include "Game.h"
 
-bool Game::isKo(int x , int y ,Stone color){
-    Board preboard = curborad ;
+Game::Game(){
+    currentBoard = Board() ;
+    currentPlayer = Stone::BLACK ;
+}
 
-    if (!preboard.playMove(x,y,color)){
+void Game::switchPlayer() {
+    if (currentPlayer == Stone::BLACK) currentPlayer = Stone::WHITE;
+    else currentPlayer = Stone::BLACK;
+}
+
+bool Game::isKo(int x , int y ,Stone color) const{
+    Board nextBoard = Game::currentBoard ;
+
+    if (!nextBoard.playMove(x,y,color)){
         return false ;
     }
 
-    if (record.size() > 1){
+    if (history.size() > 1){
 
         // 此时可判为打劫，所以不能这么下
         // 如果是像三劫循环， 就应该是认为判断
-        if (preboard == record[record.size() - 2].boards ){
-            std::cout << "wrong play\n" ;
-            return false ;
+        if (nextBoard == history[history.size() - 2].boards ){
+            return true ;
         }
 
-        curborad = preboard ;
-        record.push_back({x,y,color,curborad}) ;
-        return true ;
+        return false ;
     }
 }
 
-// 处理悔棋函数
-bool Game::undo(int x , int y , Stone color){
-    if (record.empty()){
+bool Game::playMove(int x, int y){
+    if (isKo(x,y,currentPlayer)){
         return false ;
     }
 
-    record.pop_back() ;
-    if (record.empty()){
-        curborad = Board() ;
+    if (!currentBoard.playMove(x,y,currentPlayer)){
+        return false ;
+    }
+
+    RecordMove record ;
+    record.x = x ;
+    record.y = y ;
+    record.boards = currentBoard ;
+    record.color = currentPlayer ;
+
+    history.push_back(record) ;
+    switchPlayer() ;
+
+    return true ;
+}
+// 处理悔棋函数
+bool Game::undo(){
+    if (history.empty()){
+        return false ;
+    }
+
+    history.pop_back() ;
+    if (history.empty()){
+        currentBoard = Board() ;
     }
 
     else{
-        curborad = record[record.size() - 1].boards ;
+        currentBoard = history[history.size() - 1].boards ;
     }
-    std::cout << "you've undone your play\n" ;
+    currentPlayer = history[history.size() - 1].color ;
+
     return true ;
+}
+
+const Board& Game::getBoard() const {
+    return currentBoard;
+}
+
+Stone Game::getCurrentPlayer() const {
+    return currentPlayer;
 }
