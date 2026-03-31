@@ -22,6 +22,9 @@ bool Game::isKo(int x , int y ,Stone color) const{
         return false ;
     }
 
+    if (history.size() == 1 || history.empty()){
+        return false ;
+    }
     if (history.size() > 1){
 
         // 此时可判为打劫，所以不能这么下
@@ -29,9 +32,9 @@ bool Game::isKo(int x , int y ,Stone color) const{
         if (nextBoard == history[history.size() - 2].boards ){
             return true ;
         }
-
-        return false ;
     }
+
+    return false ;
 }
 
 bool Game::playMove(int x, int y){

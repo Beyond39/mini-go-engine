@@ -1,12 +1,96 @@
-test.txt
+# Generated / temporary files
+# ----------------------------------------------------------------------------
 
-*.exe
+*~
+*.autosave
+*.a
+*.core
+*.moc
 *.o
-*.out
+*.obj
+*.orig
+*.rej
+*.so
+*.so.*
+*_pch.h.cpp
+*_resource.rc
+*.qm
+.#*
+*.*#
+core
+!core/
+tags
+.DS_Store
+.directory
+*.debug
+Makefile*
+*.prl
+*.app
+moc_*.cpp
+ui_*.h
+qrc_*.cpp
+Thumbs.db
+*.res
+*.rc
+/.qmake.cache
+/.qmake.stash
+**/.qmlls.ini
+
+# Qt Creator generated files
+*.pro.user*
+*.qbs.user*
+CMakeLists.txt.user*
+
+# Editors temporary files
+*.flc
+.*.swp
+
+# Visual Studio generated files
+*.ib_pdb_index
+*.idb
+*.ilk
+*.pdb
+*.sln
+*.suo
+*.vcproj
+*vcproj.*.*.user
+*.ncb
+*.sdf
+*.opensdf
+*.vcxproj
+*vcxproj.*
+
+# MinGW generated files
+*.Debug
+*.Release
+
+# Python byte code
+*.pyc
+
+# Binaries
 *.dll
-build/
+*.exe
+*.out
+
+# CMake generated files
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
 cmake-build-*/
 
+# Generated directories
+.moc/
+.obj/
+.pch/
+.rcc/
+.uic/
+/build*/
+.qtcreator/
+
+# IDE settings
 .vscode/
 .idea/
+
+# Custom
+test.txt
 *.user
