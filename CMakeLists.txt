@@ -22,6 +22,9 @@ qt_add_executable(GoEngine
     src/ui/pages/GamePage.cpp
     src/ui/pages/GamePage.h
 
+    src/ui/widgets/BoardWidget.cpp
+    src/ui/widgets/BoardWidget.h
+
     src/core/Board.cpp
     src/core/Board.h
     src/core/Game.cpp

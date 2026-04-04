@@ -113,6 +113,20 @@ void Board::collectGroup(int x, int y, Stone color,bool visited[SIZE][SIZE], std
     }
 }
 
+std::vector<std::pair<int, int>> Board::getLegalMoves(Stone color) const{
+    std::vector<std::pair<int,int>> legalMove ;
+
+    for (int x = 0 ; x < Board::SIZE ; ++x){
+        for (int y = 0 ; y < Board::SIZE ; ++y){
+            if(isLegalMove(x,y,color)){
+                legalMove.push_back({x,y}) ;
+            }
+        }
+    }
+
+    return legalMove ;
+}
+
 // 落子的逻辑
 bool Board::playMove(int x, int y, Stone color) {
     if (!inBounds(x, y) || board[x][y] != Stone::EMPTY) {
