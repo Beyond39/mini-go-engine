@@ -1,8 +1,10 @@
 #include "GamePage.h"
 #include "BoardWidget.h"
+#include "Board.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
+#include <QGridLayout>
 #include <QLabel>
 #include <QPushButton>
 #include <QListWidget>
@@ -14,10 +16,20 @@
 GamePage::GamePage(QWidget *parent)
     : QWidget(parent),
       backButton(nullptr),
-      boardwidget(nullptr)
+      passButton(nullptr),
+      undoButton(nullptr),
+      resignButton(nullptr),
+      restartButton(nullptr),
+      boardwidget(nullptr),
+      statusLabel(nullptr),
+      currentTurnLabel(nullptr),
+      winRateLabel(nullptr),
+      scoreLabel(nullptr),
+      moveListWidget(nullptr)
 {
     setupUI();
     setupConnections();
+    resetInfoPanel();
 }
 
 void GamePage::setupUI()
@@ -97,7 +109,7 @@ void GamePage::setupUI()
     titleFont.setBold(true) ;
     titleLabel->setFont(titleFont) ;
 
-    auto *statusLabel = new QLabel("黑方：玩家   白方：AI   模式：人机对局" , this) ;
+    statusLabel = new QLabel("黑方：玩家   白方：AI   模式：人机对局" , this) ;
 
     topBarLayout->addWidget(backButton, 0, 0, Qt::AlignLeft) ;
     topBarLayout->addWidget(titleLabel, 0, 0, Qt::AlignCenter) ;
@@ -144,17 +156,20 @@ void GamePage::setupUI()
 
     currentTurnLabel = new QLabel("当前轮到：黑方", gameInfoBox) ;
     gameInfoLayout->addWidget(currentTurnLabel) ;
-
     gameInfoLayout->addWidget(new QLabel("用时：60分钟 / 3次30秒", gameInfoBox)) ;
     
     // AI分析区
     auto *analysisBox = new QGroupBox("AI 分析" , rightPanel) ;
     auto *analysisLayout = new QVBoxLayout(analysisBox) ;
+    analysisLayout->setSpacing(6);
 
     winRateLabel = new QLabel("胜率：黑 50.0%", analysisBox);
     scoreLabel = new QLabel("目差：黑领先 0.0 目", analysisBox);
+    analysisLayout->addWidget(winRateLabel);
+    analysisLayout->addWidget(scoreLabel);
 
     auto *chartPlaceholder = new QFrame(analysisBox) ;
+    chartPlaceholder->setObjectName("chartPlaceholder");  
     chartPlaceholder->setMinimumHeight(180) ;
 
     auto *chartLayout = new QVBoxLayout(chartPlaceholder) ;
@@ -172,19 +187,16 @@ void GamePage::setupUI()
     auto *moveListLayout = new QVBoxLayout(moveListBoxGroup);
 
     moveListWidget = new QListWidget(moveListBoxGroup);
-    moveListWidget->addItem("1. 黑 D4");
-    moveListWidget->addItem("2. 白 Q16");
-
     moveListLayout->addWidget(moveListWidget);
 
     // 操作区
     auto *controlBox = new QGroupBox("操作", rightPanel) ;
     auto *controlLayout = new QVBoxLayout(controlBox) ;
 
-    auto *passButton = new QPushButton("停一手", controlBox) ;
-    auto *undoButton = new QPushButton("悔棋", controlBox) ;
-    auto *resignButton = new QPushButton("认输", controlBox) ;
-    auto *restartButton = new QPushButton("重新开始", controlBox) ;
+    passButton = new QPushButton("停一手", controlBox) ;
+    undoButton = new QPushButton("悔棋", controlBox) ;
+    resignButton = new QPushButton("认输", controlBox) ;
+    restartButton = new QPushButton("重新开始", controlBox) ;
 
     passButton->setMinimumHeight(40) ;
     undoButton->setMinimumHeight(40) ;
@@ -195,15 +207,6 @@ void GamePage::setupUI()
     controlLayout->addWidget(undoButton) ;
     controlLayout->addWidget(resignButton) ;
     controlLayout->addWidget(restartButton) ;
-
-    connect(restartButton, &QPushButton::clicked, this, [=]() {
-        boardwidget->resetBoard();
-        moveListWidget->clear();
-        currentTurnLabel->setText("当前轮到：黑方");
-        statusLabel->setText("黑方：玩家   白方：AI   模式：人机对局");
-        winRateLabel->setText("胜率：黑 50.0%");
-        scoreLabel->setText("目差：黑领先 0.0 目");
-    });
 
     // 右侧拼装
     rightLayout->addWidget(gameInfoBox) ; 
@@ -221,29 +224,66 @@ void GamePage::setupUI()
     
 }
 
+void GamePage::resetInfoPanel(){
+    moveListWidget->clear();
+    currentTurnLabel->setText("当前轮到：黑方");
+    statusLabel->setText("模式：人机对局 | 黑方：玩家 | 白方：AI");
+    winRateLabel->setText("胜率：黑 50.0%");
+    scoreLabel->setText("目差：黑领先 0.0 目");
+}
+
 void GamePage::setupConnections()
 {
     connect(backButton, &QPushButton::clicked, this, [=]() {
         emit backToHomeRequested();
     });
 
-    connect(boardwidget, &BoardWidget::movePlayed, this, [=](int x, int y, Stone color) {
-        QString colorText;
-        QString nextText;
+    connect(passButton, &QPushButton::clicked, boardwidget, &BoardWidget::passTurn);
+    connect(undoButton, &QPushButton::clicked, boardwidget, &BoardWidget::undoLastMove);
+    connect(restartButton, &QPushButton::clicked, boardwidget, &BoardWidget::resetBoard);
+    connect(resignButton, &QPushButton::clicked, boardwidget, &BoardWidget::resignCurrentPlayer);
 
-        if (color == Stone::BLACK) {
-            colorText = "黑";
-            nextText = "白";
-        } else {
-            colorText = "白";
-            nextText = "黑";
-        }
-
+    connect(boardwidget, &BoardWidget::movePlayed, this, [this](int x, int y, Stone color) {
         int moveNumber = moveListWidget->count() + 1;
-        QString moveText = QString::number(moveNumber) + ". " + colorText + " " + moveToString(x, y);
+        QString text = QString("%1. %2 %3")
+            .arg(moveNumber)
+            .arg(stoneToString(color))
+            .arg(moveToString(x, y));
+        moveListWidget->addItem(text);
+        statusLabel->setText(QString("最近一步：%1").arg(text));
+    });
 
-        moveListWidget->addItem(moveText);
-        currentTurnLabel->setText("当前轮到：" + nextText + "方");
+    connect(boardwidget, &BoardWidget::passPlayed, this, [this](Stone color) {
+        int moveNumber = moveListWidget->count() + 1;
+        QString text = QString("%1. %2 停一手")
+            .arg(moveNumber)
+            .arg(stoneToString(color));
+        moveListWidget->addItem(text);
+        statusLabel->setText(QString("最近一步：%1").arg(text));
+    });
+
+    connect(boardwidget, &BoardWidget::moveUndone, this, [this]() {
+        if (moveListWidget->count() > 0) {
+            delete moveListWidget->takeItem(moveListWidget->count() - 1);
+        }
+        statusLabel->setText("已悔棋一手");
+    });
+
+    connect(boardwidget, &BoardWidget::turnChanged, this, [this](Stone nextPlayer) {
+        currentTurnLabel->setText(QString("当前轮到：%1方").arg(stoneToString(nextPlayer)));
+    });
+
+    connect(boardwidget, &BoardWidget::illegalAction, this, [this](const QString &message) {
+        statusLabel->setText(message);
+    });
+
+    connect(boardwidget, &BoardWidget::gameReset, this, [this]() {
+        resetInfoPanel();
+    });
+
+    connect(boardwidget, &BoardWidget::gameOver, this, [this](const QString &message) {
+        currentTurnLabel->setText("当前轮到：对局结束");
+        statusLabel->setText(message);
     });
 }
 
@@ -261,3 +301,13 @@ QString GamePage::moveToString(int x, int y) const
     return col + row; 
 }
 
+QString GamePage::stoneToString(Stone color) const
+{
+    if (color == Stone::BLACK) {
+        return "黑";
+    }
+    if (color == Stone::WHITE) {
+        return "白";
+    }
+    return "空";
+}

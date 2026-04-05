@@ -6,8 +6,13 @@
 #include "Game.h"
 
 Game::Game(){
-    currentBoard = Board() ;
-    currentPlayer = Stone::BLACK ;
+    reset();
+}
+
+void Game::reset(){
+    currentBoard = Board();
+    currentPlayer = Stone::BLACK;
+    history.clear();
 }
 
 void Game::switchPlayer() {
@@ -25,10 +30,8 @@ bool Game::isKo(int x , int y ,Stone color) const{
     if (history.size() == 1 || history.empty()){
         return false ;
     }
-    if (history.size() > 1){
 
-        // 此时可判为打劫，所以不能这么下
-        // 如果是像三劫循环， 就应该是认为判断
+    if (history.size() > 1){
         if (nextBoard == history[history.size() - 2].boards ){
             return true ;
         }
@@ -57,6 +60,20 @@ bool Game::playMove(int x, int y){
 
     return true ;
 }
+
+bool Game::playPass(){
+    RecordMove record;
+    record.x = -1;
+    record.y = -1;
+    record.isPass = true;
+    record.boards = currentBoard;
+    record.color = currentPlayer;
+
+    history.push_back(record);
+    switchPlayer();
+    return true;
+}
+
 // 处理悔棋函数
 bool Game::undo(){
     if (history.empty()){
@@ -71,7 +88,7 @@ bool Game::undo(){
     else{
         currentBoard = history[history.size() - 1].boards ;
     }
-    currentPlayer = history[history.size() - 1].color ;
+    currentPlayer = history[history.size() - 2].color ;
 
     return true ;
 }
@@ -82,4 +99,12 @@ const Board& Game::getBoard() const {
 
 Stone Game::getCurrentPlayer() const {
     return currentPlayer;
+}
+
+const std::vector<RecordMove>& Game::getHistory() const{
+    return history;
+}
+
+bool Game::canUndo() const{
+    return !history.empty();
 }

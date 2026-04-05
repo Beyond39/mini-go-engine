@@ -1,6 +1,5 @@
 #pragma once
-#include <iostream>
-#include <unordered_map>
+
 #include <vector>
 #include "Board.h"
 
@@ -8,6 +7,7 @@
 struct RecordMove{
     int x ;
     int y ;
+    bool isPass = false ;
     Stone color ;
     Board boards ;
 };
@@ -17,8 +17,14 @@ struct RecordMove{
 class Game {
 public :
     Game() ;
+
+    void reset();
+
     // 下棋
     bool playMove(int x, int y);
+
+    // 用于终局的判断
+    bool playPass();
 
     // 悔棋
     bool undo();
@@ -31,6 +37,12 @@ public :
 
     // 获取当前该谁下
     Stone getCurrentPlayer() const;
+
+    // 提供UI接口，不直接触碰内层数据
+    const std::vector<RecordMove>& getHistory() const;
+
+    bool canUndo() const;
+
 private:
     Board currentBoard;
     Stone currentPlayer;

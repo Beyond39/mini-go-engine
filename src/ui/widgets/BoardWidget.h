@@ -1,8 +1,14 @@
 #pragma once 
 
 #include <QWidget>
-#include "Board.h"
+#include <QPoint>
+#include <QRectF>
+#include <QString>
+#include "Game.h"
 
+class QPainter;
+class QMouseEvent;
+class QPaintEvent;
 class BoardWidget : public QWidget 
 {
     Q_OBJECT
@@ -11,19 +17,33 @@ public:
     explicit BoardWidget(QWidget *parent = nullptr) ;
     void resetBoard() ;
     QSize sizeHint() const override;
+    Stone currentPlayer() const;
+    bool isGameFinished() const;
+
+public slots:
+    void undoLastMove();
+    void passTurn();
+    void resignCurrentPlayer();
 
 signals:
     void movePlayed(int x, int y,Stone playedColor);
+    void moveUndone();
+    void passPlayed(Stone color);
+    void turnChanged(Stone nextPlayer);
+    void illegalAction(const QString &message);
+    void gameReset();
+    void gameOver(const QString &message);
 
 protected:
     void paintEvent(QPaintEvent *event) override ;
     void mousePressEvent(QMouseEvent *event) override ;
 
 private:
-    Board board ;
-    Stone currentPlayer ;
     QPoint lastmove ;
+    bool finished;
     int boardPadding ;
+    Game game ;
+    QString finishText;
 
     int margin ;
     int cellSize ;
@@ -31,9 +51,11 @@ private:
     void drawBoard(QPainter &painter) ;
     void drawStarPoints(QPainter &painter);
     void drawStones(QPainter &painter);
+    void drawFinishedOverlay(QPainter &painter);
 
     QRectF boardRect() const;
     qreal gridStep() const;
     QPointF boardPoint(int x, int y) const;
     QPoint pixelToBoard(const QPoint &pos) const;
+    void updateLastMoveFromHistory();
 } ;

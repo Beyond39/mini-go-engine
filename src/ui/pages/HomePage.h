@@ -3,7 +3,7 @@
 #include <QWidget>
 
 class QPushButton ; 
-
+class QListWidget ;
 class HomePage : public QWidget
 {
     Q_OBJECT
@@ -16,6 +16,9 @@ signals:
 
 private:
     QPushButton *startButton ;
+    QPushButton *continueButton;
+    QListWidget *popularListWidget;
+    QListWidget *archiveListWidget;
 
     void setupUI() ;
     void setupConnections() ;
