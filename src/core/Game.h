@@ -41,6 +41,8 @@ public :
     // 提供UI接口，不直接触碰内层数据
     const std::vector<RecordMove>& getHistory() const;
 
+    bool loadFromMoves(const std::vector<Move>& moves) ;
+
     bool canUndo() const;
 
 private:

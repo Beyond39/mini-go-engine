@@ -4,6 +4,7 @@
 #include <stack>
 #include "Board.h"
 #include "Game.h"
+#include "sgf_utils.h"
 
 Game::Game(){
     reset();
@@ -93,6 +94,24 @@ bool Game::undo(){
     return true ;
 }
 
+bool Game::loadFromMoves(const std::vector<Move>& moves){
+    reset() ;
+
+    for (const auto& move : moves){
+        if (move.isPass){
+            if (!playPass){
+                return false ;
+            }
+        }
+        else{
+            if (!playMove(move.x,move.y)){
+                return false ;
+            }
+        }
+    }
+
+    return true ;
+}
 const Board& Game::getBoard() const {
     return currentBoard;
 }

@@ -4,6 +4,8 @@
 
 class QPushButton ; 
 class QListWidget ;
+class QLabel ;
+class QComboBox ;
 class HomePage : public QWidget
 {
     Q_OBJECT
@@ -17,8 +19,15 @@ signals:
 private:
     QPushButton *startButton ;
     QPushButton *continueButton;
-    QListWidget *popularListWidget;
-    QListWidget *archiveListWidget;
+    QPushButton *openSgfButton;
+    QPushButton *rulesButton;
+
+    QListWidget *popularListWidget ;
+    QListWidget *archiveListWidget ;
+
+    QLabel *statusTagLabel ;
+    QComboBox *modeComboBox ;
+    QComboBox *colorComboBox ;
 
     void setupUI() ;
     void setupConnections() ;

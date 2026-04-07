@@ -1,71 +1,163 @@
 #include "sgf_parser.h"
 #include <fstream>
 #include <iostream>
+#include <cctype>
+#include <iterator>
 
-// 对于本段代码，首先需要明确的是围棋棋谱均以.sgf格式出现
-// 所以我们需要使用相应的moves来记录所有的围棋的步数 
-std::vector<Move> SGFParser::parse(const std::string& filename){
-    std::vector<Move> moves ;
+void SGFParser::skipWhitespace(const std::string& sgf , int& pos){
+    while (pos < (int)sgf.size() && std::isspace((unsigned char)sgf[pos])){
+        ++pos ;
+    }
+}
 
-    // 这一步是读取文件
-    std::ifstream fin(filename) ;
-    if (!fin){
-        std::cout << "无法识别文件" << std::endl ;
-        return moves ;
+std::string SGFParser::parsePropIdent(const std::string& sgf , int& pos){
+    std::string ident ;
+    while (pos < (int)sgf.size() && std::isupper((unsigned char)sgf[pos])){
+        ident += sgf[pos++] ;
+    }
+    return ident ;
+}
+
+std::string SGFParser::parsePropValue(const std::string& sgf ,int& pos){
+    std::string value ;
+
+    if (pos >= (int)sgf.size() || sgf[pos] != '['){
+        return value ;
     }
 
-    // 这一步则是将文件编程字符串的形式，更容易读取
-    std::string sgf((std::istreambuf_iterator<char>(fin)),
-                     std::istreambuf_iterator<char>());
+    ++pos ;
 
-    // 接下来需要对输入的sgf文件进行扫描
-    int i = 0 ;
-    while (i < sgf.size()){
+    while(pos < (int)sgf.size()){
+        if (sgf[pos] == '\\'){
+            ++pos ;
+            if (pos < (int)sgf.size()){
+                value += sgf[pos++] ;
+            }
+        }
+        else if(sgf[pos] == ']'){
+            ++pos ;
+            break ;
+        }
+        else{
+            value += sgf[pos++] ;
+        }
+    }
 
-        // 找到对应的棋子的颜色以及左括号
-        if ((sgf[i] == 'B' || sgf[i] == 'W') && i + 1 < sgf.size() && sgf[i+1] == '['){
-            Stone stone ;
+    return value ;
+}
 
-            if(sgf[i] == 'B'){
-                stone = Stone::BLACK ;
+void SGFParser::parseProperties(const std::string& sgf , int& pos , SGFNode* node){
+    while (pos < (int)sgf.size()){
+        skipWhitespace(sgf,pos) ;
+        
+        if (pos >= (int)sgf.size()){
+            return ;
+        }
+
+        if (sgf[pos] == ';' || sgf[pos] == '(' || sgf[pos] == ')'){
+            return ;
+        }
+
+        std::string ident = parsePropIdent(sgf,pos) ;
+        if (ident.empty()){
+            ++pos ;
+            continue; 
+        }
+
+        skipWhitespace(sgf,pos) ;
+
+        while (pos < (int)sgf.size() && sgf[pos] == '['){
+            std::string value = parsePropValue(sgf,pos) ;
+            node->properties[ident].push_back(value) ;
+            skipWhitespace(sgf,pos) ;
+        }
+    }
+}
+
+SGFNode* SGFParser::parseSequence(const std::string& sgf ,int& pos , SGFNode* parent){
+    SGFNode* first = nullptr ;
+    SGFNode* prev = parent ;
+
+    while (pos < (int)sgf.size()){
+        skipWhitespace(sgf,pos) ;
+
+        if (pos >= (int)sgf.size() || sgf[pos] != ';' ){
+            break;
+        }
+
+        ++pos ;
+
+        SGFNode* node = new SGFNode() ;
+        node->parent = prev ;
+        parseProperties(sgf,pos,node) ;
+
+        if (prev){
+            prev->children.push_back(node) ;
+        }
+
+        if (!first){
+            first = node ;
+        }
+
+        prev = node ; 
+    }
+
+    return first ;
+}
+
+SGFNode* SGFParser::parseTree(const std::string& sgf , int& pos ,SGFNode* parent){
+    skipWhitespace(sgf,pos) ;
+
+    if (pos >= (int)sgf.size() || sgf[pos] != '(') {
+        return nullptr;
+    }
+
+    ++pos ;
+
+    SGFNode* sequenceStart = parseSequence(sgf,pos,parent) ;
+    SGFNode* current = sequenceStart ;
+
+    while (current && !current->children.empty()){
+        current = current->children.back();
+    }
+
+    while (pos < (int)sgf.size()){
+        skipWhitespace(sgf,pos) ;
+
+        if (pos < (int)sgf.size()){
+            skipWhitespace(sgf,pos);
+
+            if (pos < (int)sgf.size() && sgf[pos] == '('){
+                parseTree(sgf,pos,current) ;
             }
             else{
-                stone = Stone::WHITE ;
+                break; 
             }
-
-            // 找右括号
-            int j = i + 2 ;
-            while (j < sgf.size() && sgf[j] != ']'){
-                j ++ ;
-            }
-
-            // 防止格式错误
-            if (j >= sgf.size()){
-                break ;
-            }
-
-            std::string coord = sgf.substr(i + 2, j - (i + 2)) ;
-
-            // 解析坐标
-            if (coord.size() == 2){
-                char col = coord[0] ;
-                char row = coord[1] ;
-
-                // 跳过 tt 
-                if (!(col == 't' && row == 't')){
-                    Move m ;
-                    m.x = col - 'a' ;
-                    m.y = row - 'a' ;
-                    m.stone = stone ;
-
-                    moves.push_back(m) ;
-                }
-            }
-
-            i = j ; 
         }
-        i ++ ;
     }
-    
-    return moves ;
+
+    skipWhitespace(sgf,pos) ;
+
+    if (pos < (int)sgf.size() && sgf[pos] == ')'){
+        ++pos ;
+    }
+
+    return sequenceStart ;
 }
+
+SGFTree* SGFParser::parse(const std::string& filename){
+    std::ifstream fin(filename) ;
+    if (!fin){
+        std::cout << "无法打开SGF文件" << filename << std::endl ;
+        return nullptr ;
+    }
+
+    std::string sgf((std::istreambuf_iterator<char>(fin)),std::istreambuf_iterator<char>()) ;
+
+    int pos = 0 ;
+    SGFTree* tree = new SGFTree();
+    tree->root = parseTree(sgf,pos,nullptr);
+
+    return tree ;
+}
+
