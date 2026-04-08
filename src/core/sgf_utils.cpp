@@ -1,4 +1,5 @@
 #include "sgf_utils.h"
+#include "Game.h"
 
 bool extractMoveFromNode(SGFNode* node, Move& move){
     move.x = -1;
@@ -72,29 +73,6 @@ std::vector<Move> extractMainLine(SGFNode* node){
         }
 
         current = current->children[0] ;
-    }
-
-    return moves ;
-}
-
-std::vector<Move> convertHistoryToMoves(const std::vector<RecordMove> history){
-    std::vector<Move> moves ;
-
-    for (const auto& record : history){
-        Move move ;
-        move.stone = record.color ;
-        move.isPass = record.isPass ;
-
-        if (record.isPass){
-            move.x = -1 ;
-            move.y = -1 ;
-        }
-        else{
-            move.x = record.x ;
-            move.y = record.y ;
-        }
-
-        moves.push_back(move) ;
     }
 
     return moves ;

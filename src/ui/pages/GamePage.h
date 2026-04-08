@@ -3,6 +3,9 @@
 #include <QWidget>
 #include <QListWidget>
 
+#include "Game.h" 
+#include "sgf_utils.h"
+
 class QPushButton;
 class BoardWidget ;
 class QListWidget ;
@@ -16,16 +19,22 @@ class GamePage : public QWidget
 
 public:
     explicit GamePage(QWidget *parent = nullptr);
+    void loadSGFFile(const QString& path) ;
 
 signals:
     void backToHomeRequested();
 
 private:
+    Game game ;
+    std::vector<Move> currentMoves ;
+
     QPushButton *backButton ;
     QPushButton *passButton ;
     QPushButton *undoButton;
     QPushButton *resignButton;
     QPushButton *restartButton;
+    QPushButton *openSGFButton ;
+    QPushButton *saveSGFButton ;
     BoardWidget *boardwidget ;
 
     QLabel *statusLabel ;
@@ -37,6 +46,8 @@ private:
     void setupUI() ;
     void setupConnections() ;
     void resetInfoPanel() ;
+    void updatePage() ;
+
     QString moveToString(int x, int y) const ;
     QString stoneToString(Stone color) const ;
 };

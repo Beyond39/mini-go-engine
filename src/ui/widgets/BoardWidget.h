@@ -24,6 +24,7 @@ public slots:
     void undoLastMove();
     void passTurn();
     void resignCurrentPlayer();
+    void loadGame(const Game& loadedGame) ;
 
 signals:
     void movePlayed(int x, int y,Stone playedColor);
@@ -44,6 +45,7 @@ private:
     int boardPadding ;
     Game game ;
     QString finishText;
+    Board board ;
 
     int margin ;
     int cellSize ;

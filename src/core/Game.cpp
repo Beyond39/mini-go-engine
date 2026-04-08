@@ -99,7 +99,7 @@ bool Game::loadFromMoves(const std::vector<Move>& moves){
 
     for (const auto& move : moves){
         if (move.isPass){
-            if (!playPass){
+            if (!playPass()){
                 return false ;
             }
         }
@@ -126,4 +126,27 @@ const std::vector<RecordMove>& Game::getHistory() const{
 
 bool Game::canUndo() const{
     return !history.empty();
+}
+
+std::vector<Move> convertHistoryToMoves(const std::vector<RecordMove>& history){
+    std::vector<Move> moves ;
+
+    for (const auto& record : history){
+        Move move ;
+        move.stone = record.color ;
+        move.isPass = record.isPass ;
+
+        if (record.isPass){
+            move.x = -1 ;
+            move.y = -1 ;
+        }
+        else{
+            move.x = record.x ;
+            move.y = record.y ;
+        }
+
+        moves.push_back(move) ;
+    }
+
+    return moves ;
 }

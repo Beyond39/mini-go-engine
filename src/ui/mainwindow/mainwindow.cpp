@@ -17,8 +17,7 @@ MainWindow::MainWindow(QWidget *parent)
     setupConnections();
 }
 
-MainWindow::~MainWindow()
-{
+MainWindow::~MainWindow(){
 }
 
 void MainWindow::setupPages()
@@ -39,6 +38,11 @@ void MainWindow::setupConnections()
 {
     connect(homepage, &HomePage::startAIGameRequested, this, [=]() {
         stackedWidget->setCurrentWidget(gamepage);
+    });
+
+    connect(homepage, &HomePage::sgfSelected , this ,[=](const QString& path){
+        stackedWidget->setCurrentWidget(gamepage) ;
+        gamepage->loadSGFFile(path) ; 
     });
 
     connect(gamepage, &GamePage::backToHomeRequested, this, [=]() {

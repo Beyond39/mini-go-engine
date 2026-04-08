@@ -15,6 +15,7 @@ public:
 
 signals:
     void startAIGameRequested() ;
+    void sgfSelected(QString path) ;
 
 private:
     QPushButton *startButton ;
@@ -24,6 +25,7 @@ private:
 
     QListWidget *popularListWidget ;
     QListWidget *archiveListWidget ;
+    QListWidget *sgfListWidget ;
 
     QLabel *statusTagLabel ;
     QComboBox *modeComboBox ;
@@ -31,4 +33,5 @@ private:
 
     void setupUI() ;
     void setupConnections() ;
+    void loadSGFList() ;
 };

@@ -94,3 +94,7 @@ cmake-build-*/
 # Custom
 test.txt
 *.user
+data/play_sgf/*
+!data/play_sgf/.gitkeep
+data/train_sgf/*
+!data/train_sgf/.gitkeep

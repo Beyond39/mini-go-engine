@@ -10,6 +10,8 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QListWidget>
+#include <QDir>
+#include <QFileDialog>
 
 HomePage::HomePage(QWidget *parent)
     : QWidget(parent),
@@ -25,6 +27,7 @@ HomePage::HomePage(QWidget *parent)
 {
     setupUI();
     setupConnections();
+    loadSGFList() ;
 }
 
 void HomePage::setupUI()
@@ -171,6 +174,8 @@ void HomePage::setupUI()
     startButton = new QPushButton("开始游戏", heroCard) ;
     startButton->setObjectName("primaryButton") ; 
 
+    sgfListWidget = new QListWidget(this) ;
+
     continueButton = new QPushButton("继续最近对局", heroCard) ;
     openSgfButton = new QPushButton("打开棋谱", heroCard) ;
     rulesButton = new QPushButton("规则说明", heroCard) ;
@@ -267,8 +272,53 @@ void HomePage::setupConnections()
         );
     });
 
+    connect(openSgfButton, &QPushButton::clicked, this, [this]() {
+        QString filename = QFileDialog::getOpenFileName(
+            this,
+            "打开SGF棋谱",
+            QDir::currentPath(), 
+            "SGF Files (*.sgf);;All Files (*)"
+        );
+
+        if (!filename.isEmpty()) {
+            emit sgfSelected(filename);
+        }
+    });
+
+    connect(sgfListWidget, &QListWidget::itemDoubleClicked, this , [this](QListWidgetItem *item){
+        if (!item){
+            return ;
+        }
+
+        QString fullpath = item->data(Qt::UserRole).toString() ;
+        if (!fullpath.isEmpty()){
+            emit sgfSelected(fullpath) ;
+        }
+    });
+
     connect(modeComboBox, &QComboBox::currentTextChanged, this, [this](const QString &text) {
         bool enableColor = (text == "人机对局");
         colorComboBox->setEnabled(enableColor);
     });
+}
+
+void HomePage::loadSGFList(){
+    QDir traindir("data/train_sgf") ;
+    QDir playdir("data/play_sgf") ;
+
+    if (traindir.exists()) {
+        QStringList files = traindir.entryList(QStringList() << "*.sgf", QDir::Files);
+        for (const QString &file : files) {
+            QListWidgetItem* item = new QListWidgetItem("[train] " + file, sgfListWidget);
+            item->setData(Qt::UserRole, traindir.absoluteFilePath(file)); 
+        }
+    }
+
+    if (playdir.exists()) {
+        QStringList files = playdir.entryList(QStringList() << "*.sgf", QDir::Files);
+        for (const QString &file : files) {
+            QListWidgetItem* item = new QListWidgetItem("[play] " + file, sgfListWidget);
+            item->setData(Qt::UserRole, playdir.absoluteFilePath(file));
+        }
+    }
 }

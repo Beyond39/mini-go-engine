@@ -1,7 +1,6 @@
 #pragma once
 
 #include "sgf_parser.h"
-#include "Game.h"
 #include "Board.h"
 #include <vector>
 struct Move {
@@ -14,4 +13,3 @@ struct Move {
 // 判断一个节点是不是一步棋，并解析出来
 bool extractMoveFromNode(SGFNode* node, Move& move);
 std::vector<Move> extractMainLine(SGFNode* root);
-std::vector<Move> convertHistoryToMoves(const std::vector<Move>& history) ;

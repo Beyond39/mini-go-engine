@@ -1,6 +1,8 @@
 #include "GamePage.h"
 #include "BoardWidget.h"
 #include "Board.h"
+#include "sgf_writer.h"
+#include "sgf_utils.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -11,7 +13,10 @@
 #include <QFont>
 #include <QFrame>
 #include <QGroupBox>
-
+#include <QDialog>
+#include <QMessageBox>
+#include <QDateTime>
+#include <QFileDialog>
 
 GamePage::GamePage(QWidget *parent)
     : QWidget(parent),
@@ -25,7 +30,9 @@ GamePage::GamePage(QWidget *parent)
       currentTurnLabel(nullptr),
       winRateLabel(nullptr),
       scoreLabel(nullptr),
-      moveListWidget(nullptr)
+      moveListWidget(nullptr),
+      openSGFButton(nullptr),
+      saveSGFButton(nullptr)
 {
     setupUI();
     setupConnections();
@@ -80,6 +87,11 @@ void GamePage::setupUI()
 
         QPushButton:pressed {
             background: #e8dfd3;
+        }
+
+        QPushButton:disabled {
+            background: #f3f0ea;
+            color: #999186;
         }
 
         QListWidget {
@@ -197,16 +209,22 @@ void GamePage::setupUI()
     undoButton = new QPushButton("悔棋", controlBox) ;
     resignButton = new QPushButton("认输", controlBox) ;
     restartButton = new QPushButton("重新开始", controlBox) ;
+    openSGFButton = new QPushButton("打开棋谱", controlBox) ;
+    saveSGFButton = new QPushButton("保存棋谱", controlBox) ;
 
     passButton->setMinimumHeight(40) ;
     undoButton->setMinimumHeight(40) ;
     resignButton->setMinimumHeight(40) ;
     restartButton->setMinimumHeight(40) ;
+    openSGFButton->setMinimumHeight(40);
+    saveSGFButton->setMinimumHeight(40) ;
 
     controlLayout->addWidget(passButton) ;
     controlLayout->addWidget(undoButton) ;
     controlLayout->addWidget(resignButton) ;
     controlLayout->addWidget(restartButton) ;
+    controlLayout->addWidget(openSGFButton) ;
+    controlLayout->addWidget(saveSGFButton) ;
 
     // 右侧拼装
     rightLayout->addWidget(gameInfoBox) ; 
@@ -285,6 +303,38 @@ void GamePage::setupConnections()
         currentTurnLabel->setText("当前轮到：对局结束");
         statusLabel->setText(message);
     });
+
+    connect(saveSGFButton, &QPushButton::clicked , this, [this](){
+        if (game.getHistory().empty()){
+            QMessageBox::information(this, "提示" , "当前没有可以保存的棋谱") ;
+            return  ;
+        } 
+
+        QString timestamp = QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss") ;
+
+        QString defaultPath = QDir::currentPath() + "/data/play_sgf/game_" + timestamp + ".sgf";
+
+        QString filename = QFileDialog::getOpenFileName(
+            this ,
+            "保存 SGF 文件" ,
+            defaultPath ,
+            "SGF Files (*.sgf)"
+        );
+
+        if (filename.isEmpty()){
+            return ;
+        }
+
+        std::vector<Move> movesToSave = convertHistoryToMoves(game.getHistory()) ;
+        bool success = SGFWriter::saveMainLine(filename.toLocal8Bit().toStdString(), movesToSave);
+
+        if (success){
+            QMessageBox::information(this, "成功", "棋谱保存成功！");
+        }
+        else{
+            QMessageBox::information(this ,"失败" , "棋谱保存失败") ;
+        }
+    });
 }
 
 QString GamePage::moveToString(int x, int y) const
@@ -310,4 +360,63 @@ QString GamePage::stoneToString(Stone color) const
         return "白";
     }
     return "空";
+}
+
+void GamePage::loadSGFFile(const QString& path){
+    SGFTree* tree = SGFParser::parse(path.toLocal8Bit().toStdString()) ;
+
+    if (!tree || !tree->root) {
+        QMessageBox::warning(this, "错误", "棋谱解析失败");
+        delete tree;
+        return;
+    }
+
+    currentMoves = extractMainLine(tree->root) ;
+    delete tree ;
+
+    if (!game.loadFromMoves(currentMoves)){
+        QMessageBox::warning(this, "错误", "棋谱恢复失败");
+        return;
+    }
+
+    updatePage() ;
+}
+
+void GamePage::updatePage(){
+    boardwidget->loadGame(game) ;
+
+    moveListWidget->clear() ;
+    const auto& history = game.getHistory();
+
+    for (int i = 0; i < history.size(); ++i) {
+        const RecordMove& move = history[i];
+
+        QString text;
+
+        QString colorText = (move.color == Stone::BLACK) ? "黑" : "白";
+
+        if (move.isPass) {
+            text = QString("%1. %2 停一手")
+                   .arg(i + 1)
+                   .arg(colorText);
+        } else {
+            text = QString("%1. %2 (%3,%4)")
+                   .arg(i + 1)
+                   .arg(colorText)
+                   .arg(move.x)
+                   .arg(move.y);
+        }
+
+        moveListWidget->addItem(text);
+    }
+
+    QString turnText;
+
+    if (game.getCurrentPlayer() == Stone::BLACK) {
+        turnText = "当前轮到：黑方";
+    } else {
+        turnText = "当前轮到：白方";
+    }
+
+    statusLabel->setText(turnText);
 }

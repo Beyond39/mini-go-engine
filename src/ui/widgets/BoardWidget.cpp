@@ -338,3 +338,12 @@ void BoardWidget::mousePressEvent(QMouseEvent *event){
         emit illegalAction("非法落子：该位置不可下（可能是自杀或已有棋子）");
     }
 }
+
+
+void BoardWidget::loadGame(const Game& loadedGame){
+    game = loadedGame ;
+    finished = false ;
+    finishText.clear() ;
+    updateLastMoveFromHistory() ;
+    update() ;
+}
