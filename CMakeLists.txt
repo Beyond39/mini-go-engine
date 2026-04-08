@@ -29,16 +29,19 @@ qt_add_executable(GoEngine
     src/core/Board.h
     src/core/Game.cpp
     src/core/Game.h
-    src/core/sgf_parser.cpp
-    src/core/sgf_parser.h
-    src/core/sgf_utils.cpp
-    src/core/sgf_utils.h
-    src/core/sgf_writer.cpp
-    src/core/sgf_writer.h
+
+    src/sgf/sgf_parser.cpp
+    src/sgf/sgf_parser.h
+    src/sgf/sgf_writer.cpp
+    src/sgf/sgf_writer.h
+    src/sgf/sgf_utils.cpp
+    src/sgf/sgf_utils.h
 )
 
 target_include_directories(GoEngine PRIVATE
+    src
     src/core
+    src/sgf
     src/ui/mainwindow
     src/ui/pages
     src/ui/widgets
