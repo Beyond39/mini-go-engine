@@ -4,7 +4,7 @@
 #include <stack>
 #include "Board.h"
 #include "Game.h"
-#include "sgf_utils.h"
+#include "sgf/sgf_utils.h"
 
 Game::Game(){
     reset();

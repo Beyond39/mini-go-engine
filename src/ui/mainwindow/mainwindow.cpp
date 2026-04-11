@@ -34,8 +34,27 @@ void MainWindow::setupPages()
     stackedWidget->setCurrentWidget(homepage);
 }
 
-void MainWindow::setupConnections()
-{
+void MainWindow::setupConnections(){
+    connect(homepage, &HomePage::startAIGameRequested, this, [=]() {
+        QString mode = homepage->getSelectedMode();
+        QString color = homepage->getSelectedColor();
+
+        if (mode == "人机对局") {
+            if (color == "我执黑") {
+                gamepage->setAIMode(true, Stone::WHITE);
+            } 
+            else {
+                gamepage->setAIMode(true, Stone::BLACK);
+            }
+        } 
+        else {
+            gamepage->setAIMode(false, Stone::WHITE);
+        }
+
+        gamepage->startNewGame();
+        stackedWidget->setCurrentWidget(gamepage);
+    });
+
     connect(homepage, &HomePage::startAIGameRequested, this, [=]() {
         stackedWidget->setCurrentWidget(gamepage);
     });

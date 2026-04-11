@@ -3,15 +3,14 @@
 #include <QWidget>
 #include <QListWidget>
 
-#include "Game.h" 
-#include "sgf_utils.h"
+#include "core/Game.h" 
+#include "sgf/sgf_utils.h"
 
 class QPushButton;
 class BoardWidget ;
 class QListWidget ;
 class QLabel ;
 
-enum class Stone;
 
 class GamePage : public QWidget
 {
@@ -20,6 +19,8 @@ class GamePage : public QWidget
 public:
     explicit GamePage(QWidget *parent = nullptr);
     void loadSGFFile(const QString& path) ;
+    void setAIMode(bool enabled , Stone aicolor) ;
+    void startNewGame() ;
 
 signals:
     void backToHomeRequested();

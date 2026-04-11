@@ -12,6 +12,8 @@ class HomePage : public QWidget
 
 public:
     explicit HomePage(QWidget *parent = nullptr);
+    QString getSelectedMode() const;
+    QString getSelectedColor() const;
 
 signals:
     void startAIGameRequested() ;

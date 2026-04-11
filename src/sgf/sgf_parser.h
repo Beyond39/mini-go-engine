@@ -2,7 +2,7 @@
 
 #include <vector>
 #include <string>
-#include "Board.h"
+#include "../core/Board.h"
 #include <map>
 
 struct SGFNode{

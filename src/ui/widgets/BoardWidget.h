@@ -4,7 +4,7 @@
 #include <QPoint>
 #include <QRectF>
 #include <QString>
-#include "Game.h"
+#include "../core/Game.h"
 
 class QPainter;
 class QMouseEvent;
@@ -19,6 +19,9 @@ public:
     QSize sizeHint() const override;
     Stone currentPlayer() const;
     bool isGameFinished() const;
+    void setAIEnabled(bool Enabled) ;
+    void setAIcolor(Stone color) ;
+    void playAIMove() ;
 
 public slots:
     void undoLastMove();
@@ -46,6 +49,8 @@ private:
     Game game ;
     QString finishText;
     Board board ;
+    Stone aicolor ;
+    bool aiEnabled ;
 
     int margin ;
     int cellSize ;

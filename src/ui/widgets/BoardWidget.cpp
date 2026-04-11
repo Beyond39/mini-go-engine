@@ -1,4 +1,6 @@
 #include "BoardWidget.h"
+#include "../../ai/MCTS.h"
+#include "../../ai/MCTSNode.h"
 
 #include <QPainter>
 #include <QMouseEvent>
@@ -12,7 +14,9 @@ BoardWidget::BoardWidget(QWidget *parent)
     : QWidget(parent),
       lastmove(-1, -1),
       boardPadding(36),
-      finished(false)
+      finished(false),
+      aicolor(Stone::WHITE),
+      aiEnabled(false) 
 {
     setMinimumSize(650, 650);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
@@ -30,8 +34,13 @@ void BoardWidget::resetBoard(){
     finished = false;
     finishText.clear();
     update();
+
     emit gameReset();
     emit turnChanged(game.getCurrentPlayer());
+
+    if (aiEnabled && game.getCurrentPlayer() == aicolor){
+        playAIMove() ;
+    }
 }
 
 Stone BoardWidget::currentPlayer() const{
@@ -101,6 +110,10 @@ void BoardWidget::passTurn(){
         return;
     }
 
+    if (aiEnabled && game.getCurrentPlayer() == aicolor){
+        return ;
+    }
+
     Stone playedColor = game.getCurrentPlayer();
     game.playPass();
     lastmove = QPoint(-1, -1);
@@ -115,6 +128,10 @@ void BoardWidget::passTurn(){
         finishText = "双方连续停一手，对局结束";
         emit gameOver(finishText);
         update();
+    }
+
+    if (aiEnabled && game.getCurrentPlayer() == aicolor){
+        return ;
     }
 }
 
@@ -314,6 +331,10 @@ void BoardWidget::mousePressEvent(QMouseEvent *event){
         return;
     }
 
+    if (aiEnabled && game.getCurrentPlayer() == aicolor){
+        return ;
+    }
+
     QPoint boardPos = pixelToBoard(event->pos());
     int x = boardPos.x();
     int y = boardPos.y();
@@ -335,10 +356,9 @@ void BoardWidget::mousePressEvent(QMouseEvent *event){
         emit movePlayed(x, y, playedColor);
         emit turnChanged(game.getCurrentPlayer());
     } else {
-        emit illegalAction("非法落子：该位置不可下（可能是自杀或已有棋子）");
+        emit illegalAction("非法落子：该位置不可下");
     }
 }
-
 
 void BoardWidget::loadGame(const Game& loadedGame){
     game = loadedGame ;
@@ -346,4 +366,62 @@ void BoardWidget::loadGame(const Game& loadedGame){
     finishText.clear() ;
     updateLastMoveFromHistory() ;
     update() ;
+
+    emit turnChanged(game.getCurrentPlayer()) ;
+}
+
+void BoardWidget::setAIEnabled(bool Enabled){
+    aiEnabled = Enabled ;
+}
+
+void BoardWidget::setAIcolor(Stone color){
+    aicolor = color ;
+}
+
+void BoardWidget::playAIMove(){
+    if (!aiEnabled){
+        return ;
+    }
+
+    if (finished){
+        return ;
+    }
+
+    if (game.getCurrentPlayer() != aicolor){
+        return ;
+    }
+
+    MCTS ai(3) ;
+    Move bestMove = ai.getbestMove(game) ;
+
+    Stone playedMove = game.getCurrentPlayer() ;
+
+    if (bestMove.isPass){
+        game.playPass() ;
+        lastmove = QPoint(-1,-1) ;
+        update() ;
+
+        emit passPlayed(playedMove);
+        emit turnChanged(game.getCurrentPlayer());
+
+        const auto &history = game.getHistory() ;
+        if (history.size() >= 2 && history[history.size() - 1].isPass && history[history.size() - 2].isPass) {
+            finished = true;
+            finishText = "对局结束";
+            emit gameOver(finishText);
+            update();
+        }
+        else{
+            if (game.playMove(bestMove.x,bestMove.y)){
+                lastmove = QPoint(bestMove.x,bestMove.y) ;
+                update() ;
+
+                emit movePlayed(bestMove.x, bestMove.y, playedMove);
+                emit turnChanged(game.getCurrentPlayer());
+            }
+            else{
+                emit illegalAction("AI 落子失败") ;
+            }
+        }
+    }
 }

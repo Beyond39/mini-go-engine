@@ -1,8 +1,8 @@
 #include "GamePage.h"
 #include "BoardWidget.h"
-#include "Board.h"
-#include "sgf_writer.h"
-#include "sgf_utils.h"
+#include "core/Board.h"
+#include "../sgf/sgf_writer.h"
+#include "../sgf/sgf_utils.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -419,4 +419,14 @@ void GamePage::updatePage(){
     }
 
     statusLabel->setText(turnText);
+}
+
+void GamePage::setAIMode(bool enabled, Stone color){
+    boardwidget->setAIEnabled(enabled) ;
+    boardwidget->setAIcolor(color) ;
+}
+
+void GamePage::startNewGame(){
+    boardwidget->resetBoard() ;
+    resetInfoPanel() ;
 }

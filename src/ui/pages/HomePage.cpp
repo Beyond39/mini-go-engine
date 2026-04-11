@@ -322,3 +322,11 @@ void HomePage::loadSGFList(){
         }
     }
 }
+
+QString HomePage::getSelectedMode() const{
+    return modeComboBox->currentText() ;
+}
+
+QString HomePage::getSelectedColor() const{
+    return colorComboBox->currentText();
+}

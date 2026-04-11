@@ -1,5 +1,5 @@
 #include "sgf_utils.h"
-#include "Game.h"
+#include "core/Game.h"
 
 bool extractMoveFromNode(SGFNode* node, Move& move){
     move.x = -1;

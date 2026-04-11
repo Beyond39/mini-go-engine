@@ -2,7 +2,7 @@
 
 #include <vector>
 #include "Board.h"
-#include "sgf_utils.h"
+#include "../sgf/sgf_utils.h"
 
 // 记录落子的函数，为了防止打劫的时候出现问题
 struct RecordMove{

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "sgf_parser.h"
-#include "Board.h"
+#include "core/Board.h"
 #include <vector>
 struct Move {
     int x = -1;
