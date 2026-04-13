@@ -15,7 +15,7 @@ private:
     int iteration ;
     std::mt19937 rng;
 
-    std::vector<Move> getlegalMoves(const Game &game) ;
+    std::vector<Move> getproperMoves(const Game &game) ;
     Move getRandomMove(const std::vector<Move> &moves) ;
 
     MCTSNode* selectNode(MCTSNode* node) ;
@@ -23,6 +23,7 @@ private:
     double simulate(Game &game , Stone currentPlayer) ;
     void backpropagate(MCTSNode* node , double result) ;
 
+    bool hasNearbyStone(const Board& board, int x ,int y ,int radius) ;
     bool isTerminal(const Game &game) ;
     double evaluate(const Game &game , Stone currentPlayer) ;
 };

@@ -21,6 +21,9 @@ public:
     void loadSGFFile(const QString& path) ;
     void setAIMode(bool enabled , Stone aicolor) ;
     void startNewGame() ;
+    void goToStep(int num) ;
+    void goForward() ;
+    void goBackward() ;
 
 signals:
     void backToHomeRequested();
@@ -28,6 +31,10 @@ signals:
 private:
     Game game ;
     std::vector<Move> currentMoves ;
+    int replayIndex = 0 ;
+
+    bool aiEnabled = false;
+    Stone aiColor = Stone::WHITE;
 
     QPushButton *backButton ;
     QPushButton *passButton ;
@@ -37,6 +44,8 @@ private:
     QPushButton *openSGFButton ;
     QPushButton *saveSGFButton ;
     BoardWidget *boardwidget ;
+    QPushButton *stepForward ;
+    QPushButton *stepBackward ;
 
     QLabel *statusLabel ;
     QLabel *currentTurnLabel ;

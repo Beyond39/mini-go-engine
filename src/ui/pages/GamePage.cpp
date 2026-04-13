@@ -32,7 +32,9 @@ GamePage::GamePage(QWidget *parent)
       scoreLabel(nullptr),
       moveListWidget(nullptr),
       openSGFButton(nullptr),
-      saveSGFButton(nullptr)
+      saveSGFButton(nullptr),
+      stepForward(nullptr) ,
+      stepBackward(nullptr)
 {
     setupUI();
     setupConnections();
@@ -144,7 +146,7 @@ void GamePage::setupUI()
     auto *boardTitle = new QLabel("棋盘区域" ,boardPanel);
     boardTitle->setAlignment(Qt::AlignCenter) ;
 
-    boardwidget = new BoardWidget(boardPanel);
+    boardwidget = new BoardWidget(boardPanel) ;
 
     boardLayout->addWidget(boardTitle) ;
     boardLayout->addWidget(boardwidget, 1);
@@ -211,6 +213,8 @@ void GamePage::setupUI()
     restartButton = new QPushButton("重新开始", controlBox) ;
     openSGFButton = new QPushButton("打开棋谱", controlBox) ;
     saveSGFButton = new QPushButton("保存棋谱", controlBox) ;
+    stepForward = new QPushButton("上一手", controlBox) ;
+    stepBackward = new QPushButton("下一手", controlBox) ;
 
     passButton->setMinimumHeight(40) ;
     undoButton->setMinimumHeight(40) ;
@@ -218,6 +222,8 @@ void GamePage::setupUI()
     restartButton->setMinimumHeight(40) ;
     openSGFButton->setMinimumHeight(40);
     saveSGFButton->setMinimumHeight(40) ;
+    stepForward->setMinimumHeight(40) ;
+    stepBackward->setMinimumHeight(40) ; 
 
     controlLayout->addWidget(passButton) ;
     controlLayout->addWidget(undoButton) ;
@@ -225,6 +231,8 @@ void GamePage::setupUI()
     controlLayout->addWidget(restartButton) ;
     controlLayout->addWidget(openSGFButton) ;
     controlLayout->addWidget(saveSGFButton) ;
+    controlLayout->addWidget(stepForward) ;
+    controlLayout->addWidget(stepBackward) ;
 
     // 右侧拼装
     rightLayout->addWidget(gameInfoBox) ; 
@@ -245,7 +253,15 @@ void GamePage::setupUI()
 void GamePage::resetInfoPanel(){
     moveListWidget->clear();
     currentTurnLabel->setText("当前轮到：黑方");
-    statusLabel->setText("模式：人机对局 | 黑方：玩家 | 白方：AI");
+    if (aiEnabled) {
+        if (aiColor == Stone::WHITE) {
+            statusLabel->setText("模式：人机对局 | 黑方：玩家 | 白方：AI");
+        } else {
+            statusLabel->setText("模式：人机对局 | 黑方：AI | 白方：玩家");
+        }
+    } else {
+        statusLabel->setText("模式：双人对局 | 黑方：玩家 | 白方：玩家");
+    }
     winRateLabel->setText("胜率：黑 50.0%");
     scoreLabel->setText("目差：黑领先 0.0 目");
 }
@@ -260,6 +276,8 @@ void GamePage::setupConnections()
     connect(undoButton, &QPushButton::clicked, boardwidget, &BoardWidget::undoLastMove);
     connect(restartButton, &QPushButton::clicked, boardwidget, &BoardWidget::resetBoard);
     connect(resignButton, &QPushButton::clicked, boardwidget, &BoardWidget::resignCurrentPlayer);
+    connect(stepForward, &QPushButton::clicked, this ,GamePage::goForward) ;
+    connect(stepBackward, &QPushButton::clicked, this , GamePage::goBackward) ;
 
     connect(boardwidget, &BoardWidget::movePlayed, this, [this](int x, int y, Stone color) {
         int moveNumber = moveListWidget->count() + 1;
@@ -422,11 +440,58 @@ void GamePage::updatePage(){
 }
 
 void GamePage::setAIMode(bool enabled, Stone color){
+    aiEnabled = enabled ;
+    aiColor = color ;
     boardwidget->setAIEnabled(enabled) ;
     boardwidget->setAIcolor(color) ;
+
+    if (aiEnabled) {
+        if (aiColor == Stone::WHITE) {
+            statusLabel->setText("模式：人机对局 | 黑方：玩家 | 白方：AI");
+        } else {
+            statusLabel->setText("模式：人机对局 | 黑方：AI | 白方：玩家");
+        }
+    } else {
+        statusLabel->setText("模式：双人对局 | 黑方：玩家 | 白方：玩家");
+    }
+    
+    winRateLabel->setText("胜率：黑 50.0%");
+    scoreLabel->setText("目差：黑领先 0.0 目");
 }
 
 void GamePage::startNewGame(){
     boardwidget->resetBoard() ;
     resetInfoPanel() ;
+}
+
+void GamePage::goToStep(int n){
+    int time = 0 ;
+    game.reset() ;
+
+    while (time < n){
+        if (currentMoves[time].isPass) {
+            game.playPass();
+        } else {
+            int x = currentMoves[time].x;
+            int y = currentMoves[time].y;
+            game.playMove(x, y);
+        }
+        time++;
+    }
+    replayIndex = n ;
+
+    updatePage() ;
+    boardwidget->loadGame(game) ;
+} 
+
+void GamePage::goForward(){
+    std::vector<RecordMove> moves = game.getHistory() ;
+    int n = moves.size() ;
+    goToStep(n-1) ;
+}
+
+void GamePage::goBackward(){
+    std::vector<RecordMove> moves = game.getHistory() ;
+    int n = moves.size() ;
+    goToStep(n+1) ;
 }

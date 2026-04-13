@@ -9,6 +9,7 @@
 #include <QPen>
 #include <QSizePolicy>
 #include <QtMath>
+#include <QTimer>
 
 BoardWidget::BoardWidget(QWidget *parent)
     : QWidget(parent),
@@ -39,7 +40,7 @@ void BoardWidget::resetBoard(){
     emit turnChanged(game.getCurrentPlayer());
 
     if (aiEnabled && game.getCurrentPlayer() == aicolor){
-        playAIMove() ;
+        QTimer::singleShot(100, this, &BoardWidget::playAIMove);
     }
 }
 
@@ -355,6 +356,10 @@ void BoardWidget::mousePressEvent(QMouseEvent *event){
         update();
         emit movePlayed(x, y, playedColor);
         emit turnChanged(game.getCurrentPlayer());
+
+        if (aiEnabled && game.getCurrentPlayer() == aicolor) {
+            QTimer::singleShot(50, this, &BoardWidget::playAIMove);
+        }
     } else {
         emit illegalAction("非法落子：该位置不可下");
     }
@@ -411,17 +416,17 @@ void BoardWidget::playAIMove(){
             emit gameOver(finishText);
             update();
         }
-        else{
-            if (game.playMove(bestMove.x,bestMove.y)){
-                lastmove = QPoint(bestMove.x,bestMove.y) ;
-                update() ;
+    }
+    else{
+        if (game.playMove(bestMove.x,bestMove.y)){                
+            lastmove = QPoint(bestMove.x,bestMove.y) ;
+            update() ;
 
-                emit movePlayed(bestMove.x, bestMove.y, playedMove);
-                emit turnChanged(game.getCurrentPlayer());
-            }
-            else{
-                emit illegalAction("AI 落子失败") ;
-            }
+            emit movePlayed(bestMove.x, bestMove.y, playedMove);
+            emit turnChanged(game.getCurrentPlayer());
         }
+        else{
+              emit illegalAction("AI 落子失败") ;
+         }
     }
 }

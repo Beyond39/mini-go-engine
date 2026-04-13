@@ -10,13 +10,48 @@ MCTS::MCTS(int iter)
 { 
 }
 
-std::vector<Move> MCTS::getlegalMoves(const Game &game){
+bool MCTS::hasNearbyStone(const Board& board , int x , int y , int radius){
+    for (int dx = -radius ; dx <= radius ; ++dx){
+        for (int dy = radius ; dy <= radius ; ++dy){
+            if (dx == 0 && dy == 0){
+                continue;
+            }
+
+            int nx = x + dx ;
+            int ny = y + dy ;
+
+            if (nx < 0 || nx >= Board::SIZE || ny < 0 || ny >= Board::SIZE) {
+                continue;
+            }
+
+            if (board.get(nx, ny) != Stone::EMPTY) {
+                return true;
+            }
+        }
+    }
+
+    return false ;
+}
+
+std::vector<Move> MCTS::getproperMoves(const Game &game){
     std::vector<Move> moves ;
     const Board board = game.getBoard() ;
     Stone player = game.getCurrentPlayer() ;
 
     std::vector<std::pair<int,int>> points = board.getLegalMoves(player) ;
+
+    const std::vector<RecordMove>& history = game.getHistory();
+    bool earlyOpening = (history.size() < 2);
+
     for (auto it : points){
+        int x = it.first;
+        int y = it.second;
+        
+        if (!earlyOpening){
+            if (!hasNearbyStone(board, x, y, 2)) {
+                continue;
+            }
+        }
         Move move ;
         move.x = it.first ;
         move.y = it.second ;
@@ -26,6 +61,16 @@ std::vector<Move> MCTS::getlegalMoves(const Game &game){
         moves.push_back(move) ;
     }
 
+    if (moves.empty()){
+        for (auto it : points) {
+            Move move;
+            move.x = it.first;
+            move.y = it.second;
+            move.stone = player;
+            move.isPass = false;
+            moves.push_back(move);
+        }
+    }
     Move passMove;
     passMove.x = -1;
     passMove.y = -1;
@@ -166,7 +211,11 @@ MCTSNode* MCTS::expandNode(MCTSNode* node){
         return node ;
     }
 
-    Move move = node->untriedMoves.back() ;
+    std::uniform_int_distribution<int> dist(0, node->untriedMoves.size() - 1);
+    int idx = dist(rng);
+    Move move = node->untriedMoves[idx];
+
+    node->untriedMoves[idx] = node->untriedMoves.back() ;
     node->untriedMoves.pop_back() ;
 
     Game nextgame = node->game ;
@@ -178,7 +227,7 @@ MCTSNode* MCTS::expandNode(MCTSNode* node){
         nextgame.playMove(move.x,move.y) ;
     }
 
-    MCTSNode* child = new MCTSNode(nextgame, move, node, getlegalMoves(nextgame)) ;
+    MCTSNode* child = new MCTSNode(nextgame, move, node, getproperMoves(nextgame)) ;
     node->children.push_back(child) ;
 
     return child ;
@@ -186,29 +235,62 @@ MCTSNode* MCTS::expandNode(MCTSNode* node){
 
 double MCTS::simulate(Game &gameState , Stone currentPlayer){
     Game newGame = gameState ;
-    int maxDepth = 80 ;
-    int step = 0 ;
+    int maxDepth = 10 ;
+    int steps = 0 ;
 
-    while (!isTerminal(newGame) && step < maxDepth){
-        std::vector<Move> legalMove = getlegalMoves(newGame) ;
+    while (!isTerminal(newGame) && steps < maxDepth){
+        bool moved = false;
 
-        if (legalMove.empty()){
-            break ;
+        std::uniform_int_distribution<int> dist(0, Board::SIZE - 1);
+
+        for (int i = 0; i < 20; ++i) {
+            int x = dist(rng);
+            int y = dist(rng);
+
+            if (newGame.getBoard().get(x, y) != Stone::EMPTY) {
+                continue;
+            }
+
+            const Board& board = newGame.getBoard();
+            const std::vector<RecordMove>& history = newGame.getHistory();
+            bool earlyOpening = (history.size() < 2);
+
+            if (!earlyOpening) {
+                if (!hasNearbyStone(board, x, y, 2)) {
+                    continue;
+                }
+            }
+
+            if (newGame.playMove(x, y)) {
+                moved = true;
+                break;
+            }
         }
 
-        Move randomMove = getRandomMove(legalMove) ;
+        if (!moved) {
+            std::vector<Move> legalMoves = getproperMoves(newGame);
 
-        if (randomMove.isPass){
-            newGame.playPass() ;
+            std::vector<Move> normalMoves;
+            for (const Move& move : legalMoves) {
+                if (!move.isPass) {
+                    normalMoves.push_back(move);
+                }
+            }
+
+            if (!normalMoves.empty()) {
+                Move fallbackMove = getRandomMove(normalMoves);
+                newGame.playMove(fallbackMove.x, fallbackMove.y);
+                moved = true;
+            }
+            else {
+                newGame.playPass();
+            }
         }
-        else {
-            newGame.playMove(randomMove.x,randomMove.y) ;
-        }
-        
-        step ++ ;
+
+        steps++;
     }
 
-    return evaluate(newGame, currentPlayer) ;
+    return evaluate(newGame, currentPlayer);
 }
 
 void MCTS::backpropagate(MCTSNode* node , double result){
@@ -226,7 +308,7 @@ Move MCTS::getbestMove(const Game &game){
     dummyMove.isPass = false ;
     dummyMove.stone = Stone::EMPTY ;
 
-    std::vector<Move> rootMoves = getlegalMoves(game) ;
+    std::vector<Move> rootMoves = getproperMoves(game) ;
 
     if (rootMoves.empty()){
         return dummyMove ;
@@ -242,7 +324,7 @@ Move MCTS::getbestMove(const Game &game){
             continue; 
         }
 
-        if (!isTerminal(game) && !node->isFullyExpanded()){
+        if (!isTerminal(node->game) && !node->isFullyExpanded()){
             node = expandNode(node) ;
         }
 
@@ -263,5 +345,5 @@ Move MCTS::getbestMove(const Game &game){
     Move bestMove =  bestChild ? bestChild->move : dummyMove ;
 
     delete root ;
-    return dummyMove ;
+    return bestMove ;
 }
