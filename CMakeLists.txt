@@ -2,19 +2,28 @@ cmake_minimum_required(VERSION 3.19)
 
 project(GoEngine LANGUAGES CXX)
 
+# ===== C++ 标准 =====
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# ===== Qt 路径（MinGW 版本）=====
+set(CMAKE_PREFIX_PATH
+    "C:/Qt/6.10.2/mingw_64"
+)
+
+# ===== 查找 Qt =====
 find_package(Qt6 REQUIRED COMPONENTS Core Widgets)
 
 qt_standard_project_setup()
 
+# ===== 源文件 =====
 qt_add_executable(GoEngine
     WIN32 MACOSX_BUNDLE
 
+    # ===== main =====
     src/main.cpp
 
+    # ===== UI =====
     src/ui/mainwindow/mainwindow.cpp
     src/ui/mainwindow/mainwindow.h
 
@@ -26,11 +35,13 @@ qt_add_executable(GoEngine
     src/ui/widgets/BoardWidget.cpp
     src/ui/widgets/BoardWidget.h
 
+    # ===== core =====
     src/core/Board.cpp
     src/core/Board.h
     src/core/Game.cpp
     src/core/Game.h
 
+    # ===== sgf =====
     src/sgf/sgf_parser.cpp
     src/sgf/sgf_parser.h
     src/sgf/sgf_writer.cpp
@@ -38,23 +49,29 @@ qt_add_executable(GoEngine
     src/sgf/sgf_utils.cpp
     src/sgf/sgf_utils.h
 
+    # ===== AI（只保留 MCTS）=====
     src/ai/MCTS.cpp
     src/ai/MCTS.h
     src/ai/MCTSNode.cpp
     src/ai/MCTSNode.h
 )
 
+# ===== 头文件路径 =====
 target_include_directories(GoEngine PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/core
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/sgf
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/mainwindow
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/pages
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/widgets
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/ai
+    src
+    src/core
+    src/sgf
+    src/ui/mainwindow
+    src/ui/pages
+    src/ui/widgets
+    src/ai
 )
 
+# ===== 链接 Qt =====
 target_link_libraries(GoEngine PRIVATE
     Qt6::Core
     Qt6::Widgets
 )
+
+# ===== 编译标准 =====
+set_property(TARGET GoEngine PROPERTY CXX_STANDARD 17)

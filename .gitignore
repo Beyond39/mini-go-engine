@@ -66,6 +66,7 @@ CMakeLists.txt.user*
 
 # Python byte code
 *.pyc
+__pycache__/
 
 # Binaries
 *.dll
@@ -91,10 +92,20 @@ cmake-build-*/
 .vscode/
 .idea/
 
-# Custom
-test.txt
-*.user
-data/play_sgf/*
+*.bin
+data/bin/
+*.pt
+*.pth
+data/saves/
+
+!data/play_sgf/*
 !data/play_sgf/.gitkeep
+
 data/train_sgf/*
 !data/train_sgf/.gitkeep
+
+data/filelists/
+!data/filelists/*.txt
+
+test.txt
+*.user
