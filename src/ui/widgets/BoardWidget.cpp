@@ -9,7 +9,6 @@
 #include <QPen>
 #include <QSizePolicy>
 #include <QtMath>
-#include <QTimer>
 
 BoardWidget::BoardWidget(QWidget *parent)
     : QWidget(parent),
@@ -39,9 +38,6 @@ void BoardWidget::resetBoard(){
     emit gameReset();
     emit turnChanged(game.getCurrentPlayer());
 
-    if (aiEnabled && game.getCurrentPlayer() == aicolor){
-        QTimer::singleShot(100, this, &BoardWidget::playAIMove);
-    }
 }
 
 Stone BoardWidget::currentPlayer() const{
@@ -152,6 +148,11 @@ void BoardWidget::resignCurrentPlayer(){
 
     emit gameOver(finishText);
     update();
+}
+
+const Game& BoardWidget::getGame() const
+{
+    return game;
 }
 
 void BoardWidget::drawBoard(QPainter &painter){
@@ -356,11 +357,8 @@ void BoardWidget::mousePressEvent(QMouseEvent *event){
         update();
         emit movePlayed(x, y, playedColor);
         emit turnChanged(game.getCurrentPlayer());
-
-        if (aiEnabled && game.getCurrentPlayer() == aicolor) {
-            QTimer::singleShot(50, this, &BoardWidget::playAIMove);
-        }
-    } else {
+    } 
+    else {
         emit illegalAction("非法落子：该位置不可下");
     }
 }
@@ -381,52 +379,4 @@ void BoardWidget::setAIEnabled(bool Enabled){
 
 void BoardWidget::setAIcolor(Stone color){
     aicolor = color ;
-}
-
-void BoardWidget::playAIMove(){
-    if (!aiEnabled){
-        return ;
-    }
-
-    if (finished){
-        return ;
-    }
-
-    if (game.getCurrentPlayer() != aicolor){
-        return ;
-    }
-
-    MCTS ai(3) ;
-    Move bestMove = ai.getbestMove(game) ;
-
-    Stone playedMove = game.getCurrentPlayer() ;
-
-    if (bestMove.isPass){
-        game.playPass() ;
-        lastmove = QPoint(-1,-1) ;
-        update() ;
-
-        emit passPlayed(playedMove);
-        emit turnChanged(game.getCurrentPlayer());
-
-        const auto &history = game.getHistory() ;
-        if (history.size() >= 2 && history[history.size() - 1].isPass && history[history.size() - 2].isPass) {
-            finished = true;
-            finishText = "对局结束";
-            emit gameOver(finishText);
-            update();
-        }
-    }
-    else{
-        if (game.playMove(bestMove.x,bestMove.y)){                
-            lastmove = QPoint(bestMove.x,bestMove.y) ;
-            update() ;
-
-            emit movePlayed(bestMove.x, bestMove.y, playedMove);
-            emit turnChanged(game.getCurrentPlayer());
-        }
-        else{
-              emit illegalAction("AI 落子失败") ;
-         }
-    }
 }

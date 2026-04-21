@@ -5,6 +5,7 @@ project(GoEngine LANGUAGES CXX)
 # ===== C++ 标准 =====
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # ===== Qt 路径（MinGW 版本）=====
 set(CMAKE_PREFIX_PATH
@@ -12,7 +13,7 @@ set(CMAKE_PREFIX_PATH
 )
 
 # ===== 查找 Qt =====
-find_package(Qt6 REQUIRED COMPONENTS Core Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Concurrent)
 
 qt_standard_project_setup()
 
@@ -49,11 +50,16 @@ qt_add_executable(GoEngine
     src/sgf/sgf_utils.cpp
     src/sgf/sgf_utils.h
 
-    # ===== AI（只保留 MCTS）=====
+    # ===== AI =====
     src/ai/MCTS.cpp
     src/ai/MCTS.h
     src/ai/MCTSNode.cpp
     src/ai/MCTSNode.h
+    src/ai/EvaluationResult.h
+    src/ai/BoardSerializer.h
+    src/ai/BoardSerializer.cpp
+    src/ai/PythonEvaluator.h
+    src/ai/PythonEvaluator.cpp
 )
 
 # ===== 头文件路径 =====
@@ -71,6 +77,7 @@ target_include_directories(GoEngine PRIVATE
 target_link_libraries(GoEngine PRIVATE
     Qt6::Core
     Qt6::Widgets
+    Qt6::Concurrent
 )
 
 # ===== 编译标准 =====

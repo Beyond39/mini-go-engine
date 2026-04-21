@@ -5,15 +5,18 @@
 
 #include "../core/Game.h"
 #include "MCTSNode.h"
+#include "PythonEvaluator.h"
 
 class MCTS{
 public:
-    MCTS(int iter = 200) ;
+    MCTS(int iter = 200 , PythonEvaluator* eval = nullptr) ;
     Move getbestMove(const Game &game) ;
+    explicit MCTS(PythonEvaluator* evaluator = nullptr);
 
 private:
     int iteration ;
     std::mt19937 rng;
+    PythonEvaluator* evaluator = nullptr ;
 
     std::vector<Move> getproperMoves(const Game &game) ;
     Move getRandomMove(const std::vector<Move> &moves) ;

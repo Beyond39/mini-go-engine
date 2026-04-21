@@ -2,6 +2,7 @@
 
 #include <QWidget>
 #include <QListWidget>
+#include <QFutureWatcher>
 
 #include "core/Game.h" 
 #include "sgf/sgf_utils.h"
@@ -10,7 +11,8 @@ class QPushButton;
 class BoardWidget ;
 class QListWidget ;
 class QLabel ;
-
+class PythonEvaluator ;
+class MCTS ;
 
 class GamePage : public QWidget
 {
@@ -24,6 +26,7 @@ public:
     void goToStep(int num) ;
     void goForward() ;
     void goBackward() ;
+    ~GamePage();
 
 signals:
     void backToHomeRequested();
@@ -35,6 +38,12 @@ private:
 
     bool aiEnabled = false;
     Stone aiColor = Stone::WHITE;
+
+    QFutureWatcher<Move>* aiWatcher;
+    bool aiThinking = false;
+
+    std::unique_ptr<PythonEvaluator> evaluator;
+    std::unique_ptr<MCTS> mcts;
 
     QPushButton *backButton ;
     QPushButton *passButton ;
@@ -57,6 +66,7 @@ private:
     void setupConnections() ;
     void resetInfoPanel() ;
     void updatePage() ;
+    void tryAIMove();
 
     QString moveToString(int x, int y) const ;
     QString stoneToString(Stone color) const ;

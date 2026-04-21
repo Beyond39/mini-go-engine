@@ -3,6 +3,8 @@
 #include "core/Board.h"
 #include "../sgf/sgf_writer.h"
 #include "../sgf/sgf_utils.h"
+#include "../../ai/PythonEvaluator.h"
+#include "../../ai/MCTS.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -17,6 +19,7 @@
 #include <QMessageBox>
 #include <QDateTime>
 #include <QFileDialog>
+#include <QtConcurrent>
 
 GamePage::GamePage(QWidget *parent)
     : QWidget(parent),
@@ -39,8 +42,35 @@ GamePage::GamePage(QWidget *parent)
     setupUI();
     setupConnections();
     resetInfoPanel();
+
+    aiWatcher = new QFutureWatcher<Move>(this);
+
+    connect(aiWatcher, &QFutureWatcher<Move>::finished, this, [this]() {
+        aiThinking = false;
+        boardwidget->setEnabled(true);
+
+        Move aiMove = aiWatcher->result();
+
+        if (aiMove.isPass) {
+            game.playPass();
+        } else {
+            game.playMove(aiMove.x, aiMove.y);
+        }
+
+        updatePage();
+        statusLabel->setText("AI 已完成落子");
+    });
+
+    evaluator = std::make_unique<PythonEvaluator>(
+        "python",
+        "E:/vscode-code/GoEngine/python-ai/infer.py",
+        "E:/vscode-code/GoEngine/python-ai/best_model.pth"
+    );
+
+    mcts = std::make_unique<MCTS>(30, evaluator.get());
 }
 
+GamePage::~GamePage() = default;
 void GamePage::setupUI()
 {
     // 给当前页面命名，方便样式表只作用在这个页面上
@@ -116,8 +146,9 @@ void GamePage::setupUI()
 
     backButton = new QPushButton("返回首页" , this) ;
     backButton->setMinimumHeight(36);
-
-    auto *titleLabel = new QLabel("人机对局" , this) ;
+    
+    QString str = aiEnabled ? "人机对局" : "双人对局" ;
+    auto *titleLabel = new QLabel(str , this) ;
     QFont titleFont ;
     titleFont.setPointSize(16) ;
     titleFont.setBold(true) ;
@@ -274,34 +305,50 @@ void GamePage::setupConnections()
 
     connect(passButton, &QPushButton::clicked, boardwidget, &BoardWidget::passTurn);
     connect(undoButton, &QPushButton::clicked, boardwidget, &BoardWidget::undoLastMove);
-    connect(restartButton, &QPushButton::clicked, boardwidget, &BoardWidget::resetBoard);
+    connect(restartButton, &QPushButton::clicked,  this, &GamePage::startNewGame);
     connect(resignButton, &QPushButton::clicked, boardwidget, &BoardWidget::resignCurrentPlayer);
     connect(stepForward, &QPushButton::clicked, this ,GamePage::goForward) ;
     connect(stepBackward, &QPushButton::clicked, this , GamePage::goBackward) ;
 
     connect(boardwidget, &BoardWidget::movePlayed, this, [this](int x, int y, Stone color) {
+        if (!game.playMove(x, y)) {
+            statusLabel->setText("落子失败");
+            return;
+        }
+
+        game.playMove(x, y);
+        
         int moveNumber = moveListWidget->count() + 1;
         QString text = QString("%1. %2 %3")
             .arg(moveNumber)
             .arg(stoneToString(color))
             .arg(moveToString(x, y));
         moveListWidget->addItem(text);
+        currentTurnLabel->setText(QString("当前轮到：%1方").arg(stoneToString(game.getCurrentPlayer())));
         statusLabel->setText(QString("最近一步：%1").arg(text));
+
+        tryAIMove() ;
     });
 
     connect(boardwidget, &BoardWidget::passPlayed, this, [this](Stone color) {
+        game.playPass();
+
         int moveNumber = moveListWidget->count() + 1;
         QString text = QString("%1. %2 停一手")
             .arg(moveNumber)
             .arg(stoneToString(color));
         moveListWidget->addItem(text);
+        currentTurnLabel->setText(QString("当前轮到：%1方").arg(stoneToString(game.getCurrentPlayer())));
         statusLabel->setText(QString("最近一步：%1").arg(text));
+
+        tryAIMove() ;
     });
 
     connect(boardwidget, &BoardWidget::moveUndone, this, [this]() {
-        if (moveListWidget->count() > 0) {
-            delete moveListWidget->takeItem(moveListWidget->count() - 1);
-        }
+        game = boardwidget->getGame();
+        aiThinking = false;
+        boardwidget->setEnabled(true);
+        updatePage();
         statusLabel->setText("已悔棋一手");
     });
 
@@ -314,6 +361,10 @@ void GamePage::setupConnections()
     });
 
     connect(boardwidget, &BoardWidget::gameReset, this, [this]() {
+        currentMoves.clear();
+        replayIndex = 0;
+        aiThinking = false;
+        boardwidget->setEnabled(true);
         resetInfoPanel();
     });
 
@@ -460,8 +511,19 @@ void GamePage::setAIMode(bool enabled, Stone color){
 }
 
 void GamePage::startNewGame(){
-    boardwidget->resetBoard() ;
-    resetInfoPanel() ;
+    game.reset();
+    currentMoves.clear();
+    replayIndex = 0;
+
+    aiThinking = false;
+    boardwidget->setEnabled(true);
+
+    boardwidget->resetBoard();
+    boardwidget->loadGame(game); 
+
+    resetInfoPanel();
+    statusLabel->setText("已重新开始");
+
 }
 
 void GamePage::goToStep(int n){
@@ -495,3 +557,29 @@ void GamePage::goBackward(){
     int n = moves.size() ;
     goToStep(n+1) ;
 }
+
+void GamePage::tryAIMove(){
+    if (!aiEnabled || !mcts)
+        return;
+
+    if (game.getCurrentPlayer() != aiColor)
+        return;
+
+    if (aiThinking){
+        return ; 
+    }
+
+    aiThinking = true ;
+
+    boardwidget->setEnabled(false); 
+    statusLabel->setText("AI 思考中");
+
+    Game gameCopy = game;
+
+    auto future = QtConcurrent::run([this, gameCopy]() mutable {
+        return mcts->getbestMove(gameCopy);
+    });
+
+    aiWatcher->setFuture(future);
+}
+

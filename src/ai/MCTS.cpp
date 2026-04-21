@@ -4,15 +4,16 @@
 
 #include <algorithm>
 
-MCTS::MCTS(int iter)
-    :iteration(iter),
-     rng(std::random_device{}())
-{ 
+MCTS::MCTS(int iter, PythonEvaluator* eval)
+    : iteration(iter),
+      evaluator(eval),
+      rng(std::random_device{}())
+{
 }
 
 bool MCTS::hasNearbyStone(const Board& board , int x , int y , int radius){
     for (int dx = -radius ; dx <= radius ; ++dx){
-        for (int dy = radius ; dy <= radius ; ++dy){
+        for (int dy = -radius ; dy <= radius ; ++dy){
             if (dx == 0 && dy == 0){
                 continue;
             }
@@ -91,14 +92,6 @@ Move MCTS::getRandomMove(const std::vector<Move> &moves){
         passMove.isPass = true; 
         return passMove ;
     }
-
-    std::vector<Move> normalMoves;
-    for (const Move& move : moves) {
-        if (!move.isPass) {
-            normalMoves.push_back(move);
-        }
-    }
-
     std::uniform_int_distribution<int> dist(0,moves.size() - 1) ;
     int index = dist(rng) ;
 
@@ -233,64 +226,20 @@ MCTSNode* MCTS::expandNode(MCTSNode* node){
     return child ;
 }
 
-double MCTS::simulate(Game &gameState , Stone currentPlayer){
-    Game newGame = gameState ;
-    int maxDepth = 10 ;
-    int steps = 0 ;
+double MCTS::simulate(Game& gameState, Stone currentPlayer)
+{
+    if (evaluator != nullptr) {
+        EvaluationResult result = evaluator->evaluate(
+            gameState.getBoard(),
+            static_cast<int>(currentPlayer)
+        );
 
-    while (!isTerminal(newGame) && steps < maxDepth){
-        bool moved = false;
-
-        std::uniform_int_distribution<int> dist(0, Board::SIZE - 1);
-
-        for (int i = 0; i < 20; ++i) {
-            int x = dist(rng);
-            int y = dist(rng);
-
-            if (newGame.getBoard().get(x, y) != Stone::EMPTY) {
-                continue;
-            }
-
-            const Board& board = newGame.getBoard();
-            const std::vector<RecordMove>& history = newGame.getHistory();
-            bool earlyOpening = (history.size() < 2);
-
-            if (!earlyOpening) {
-                if (!hasNearbyStone(board, x, y, 2)) {
-                    continue;
-                }
-            }
-
-            if (newGame.playMove(x, y)) {
-                moved = true;
-                break;
-            }
+        if (result.valid) {
+            return static_cast<double>(result.value);
         }
-
-        if (!moved) {
-            std::vector<Move> legalMoves = getproperMoves(newGame);
-
-            std::vector<Move> normalMoves;
-            for (const Move& move : legalMoves) {
-                if (!move.isPass) {
-                    normalMoves.push_back(move);
-                }
-            }
-
-            if (!normalMoves.empty()) {
-                Move fallbackMove = getRandomMove(normalMoves);
-                newGame.playMove(fallbackMove.x, fallbackMove.y);
-                moved = true;
-            }
-            else {
-                newGame.playPass();
-            }
-        }
-
-        steps++;
     }
 
-    return evaluate(newGame, currentPlayer);
+    return evaluate(gameState, currentPlayer);
 }
 
 void MCTS::backpropagate(MCTSNode* node , double result){
@@ -346,4 +295,9 @@ Move MCTS::getbestMove(const Game &game){
 
     delete root ;
     return bestMove ;
+}
+
+MCTS::MCTS(PythonEvaluator* evaluator)
+    : evaluator(evaluator)
+{
 }

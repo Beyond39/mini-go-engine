@@ -21,7 +21,7 @@ public:
     bool isGameFinished() const;
     void setAIEnabled(bool Enabled) ;
     void setAIcolor(Stone color) ;
-    void playAIMove() ;
+    const Game& getGame() const;
 
 public slots:
     void undoLastMove();
@@ -43,12 +43,11 @@ protected:
     void mousePressEvent(QMouseEvent *event) override ;
 
 private:
+    Game game ;
     QPoint lastmove ;
     bool finished;
     int boardPadding ;
-    Game game ;
     QString finishText;
-    Board board ;
     Stone aicolor ;
     bool aiEnabled ;
 
