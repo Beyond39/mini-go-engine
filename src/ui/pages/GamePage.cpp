@@ -61,13 +61,21 @@ GamePage::GamePage(QWidget *parent)
         statusLabel->setText("AI 已完成落子");
     });
 
+    QString appDir = QCoreApplication::applicationDirPath();
+    QDir dir(appDir);
+
+    dir.cdUp();
+
+    QString scriptPath = dir.filePath("python-ai/infer.py");
+    QString modelPath  = dir.filePath("python-ai/checkpoints/go_model_best.pth");
+
     evaluator = std::make_unique<PythonEvaluator>(
         "python",
-        "E:/vscode-code/GoEngine/python-ai/infer.py",
-        "E:/vscode-code/GoEngine/python-ai/best_model.pth"
+        scriptPath,
+        modelPath
     );
 
-    mcts = std::make_unique<MCTS>(30, evaluator.get());
+    mcts = std::make_unique<MCTS>(10000, evaluator.get());
 }
 
 GamePage::~GamePage() = default;
@@ -311,12 +319,7 @@ void GamePage::setupConnections()
     connect(stepBackward, &QPushButton::clicked, this , GamePage::goBackward) ;
 
     connect(boardwidget, &BoardWidget::movePlayed, this, [this](int x, int y, Stone color) {
-        if (!game.playMove(x, y)) {
-            statusLabel->setText("落子失败");
-            return;
-        }
-
-        game.playMove(x, y);
+        game = boardwidget->getGame();
         
         int moveNumber = moveListWidget->count() + 1;
         QString text = QString("%1. %2 %3")
@@ -331,7 +334,7 @@ void GamePage::setupConnections()
     });
 
     connect(boardwidget, &BoardWidget::passPlayed, this, [this](Stone color) {
-        game.playPass();
+        game = boardwidget->getGame();
 
         int moveNumber = moveListWidget->count() + 1;
         QString text = QString("%1. %2 停一手")
@@ -527,6 +530,14 @@ void GamePage::startNewGame(){
 }
 
 void GamePage::goToStep(int n){
+    if (n < 0){
+        n = 0 ;
+    }
+
+    if (n > (int)currentMoves.size()){
+        n = (int)currentMoves.size() ;
+    }
+
     int time = 0 ;
     game.reset() ;
 

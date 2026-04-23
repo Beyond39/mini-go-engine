@@ -11,7 +11,6 @@ class MCTS{
 public:
     MCTS(int iter = 200 , PythonEvaluator* eval = nullptr) ;
     Move getbestMove(const Game &game) ;
-    explicit MCTS(PythonEvaluator* evaluator = nullptr);
 
 private:
     int iteration ;
@@ -29,4 +28,7 @@ private:
     bool hasNearbyStone(const Board& board, int x ,int y ,int radius) ;
     bool isTerminal(const Game &game) ;
     double evaluate(const Game &game , Stone currentPlayer) ;
+
+    int moveToPolicyIndex(const Move& move) const;
+    std::vector<Move> sortMovesByPolicy(const std::vector<Move>& moves, const std::vector<float>& policy) const;
 };

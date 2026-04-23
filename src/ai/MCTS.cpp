@@ -259,6 +259,21 @@ Move MCTS::getbestMove(const Game &game){
 
     std::vector<Move> rootMoves = getproperMoves(game) ;
 
+    if (evaluator) {
+        int currentPlayerInt = (game.getCurrentPlayer() == Stone::BLACK) ? 1 : 2;
+
+        EvaluationResult evalResult = evaluator->evaluate(game.getBoard(), currentPlayerInt);
+
+        if (evalResult.valid && evalResult.policy.size() == 362) {
+            rootMoves = sortMovesByPolicy(rootMoves, evalResult.policy);
+
+            int keepTopK = 20;  
+            if ((int)rootMoves.size() > keepTopK) {
+                rootMoves.resize(keepTopK);
+            }
+        }
+    }
+
     if (rootMoves.empty()){
         return dummyMove ;
     }
@@ -297,7 +312,28 @@ Move MCTS::getbestMove(const Game &game){
     return bestMove ;
 }
 
-MCTS::MCTS(PythonEvaluator* evaluator)
-    : evaluator(evaluator)
+int MCTS::moveToPolicyIndex(const Move& move) const
 {
+    if (move.isPass) {
+        return 361;
+    }
+    return move.x * Board::SIZE + move.y;
+}
+
+std::vector<Move> MCTS::sortMovesByPolicy(const std::vector<Move>& moves, const std::vector<float>& policy) const
+{
+    std::vector<Move> sortedMoves = moves;
+
+    std::sort(sortedMoves.begin(), sortedMoves.end(),
+        [this, &policy](const Move& a, const Move& b) {
+            int ia = moveToPolicyIndex(a);
+            int ib = moveToPolicyIndex(b);
+
+            float pa = (ia >= 0 && ia < (int)policy.size()) ? policy[ia] : 0.0f;
+            float pb = (ib >= 0 && ib < (int)policy.size()) ? policy[ib] : 0.0f;
+
+            return pa > pb;
+        });
+
+    return sortedMoves;
 }
