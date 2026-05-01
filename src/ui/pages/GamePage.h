@@ -3,6 +3,7 @@
 #include <QWidget>
 #include <QListWidget>
 #include <QFutureWatcher>
+#include <QVector>
 
 #include "core/Game.h" 
 #include "sgf/sgf_utils.h"
@@ -11,9 +12,7 @@ class QPushButton;
 class BoardWidget ;
 class QListWidget ;
 class QLabel ;
-class PythonEvaluator ;
-class MCTS ;
-
+class WinRateChartWidget;
 class GamePage : public QWidget
 {
     Q_OBJECT
@@ -39,11 +38,11 @@ private:
     bool aiEnabled = false;
     Stone aiColor = Stone::WHITE;
 
-    QFutureWatcher<Move>* aiWatcher;
+    QFutureWatcher<Move>* aiWatcher = nullptr;
     bool aiThinking = false;
 
-    std::unique_ptr<PythonEvaluator> evaluator;
-    std::unique_ptr<MCTS> mcts;
+    QString scriptPath;
+    QString modelPath;
 
     QPushButton *backButton ;
     QPushButton *passButton ;
@@ -52,15 +51,19 @@ private:
     QPushButton *restartButton;
     QPushButton *openSGFButton ;
     QPushButton *saveSGFButton ;
+    QPushButton* reviewButton ;
     BoardWidget *boardwidget ;
     QPushButton *stepForward ;
     QPushButton *stepBackward ;
-
+    
     QLabel *statusLabel ;
     QLabel *currentTurnLabel ;
     QLabel *winRateLabel ;
     QLabel *scoreLabel ;
     QListWidget *moveListWidget ;
+    WinRateChartWidget* winRateChart;
+
+    QVector<double> winRates;
 
     void setupUI() ;
     void setupConnections() ;
@@ -68,6 +71,20 @@ private:
     void updatePage() ;
     void tryAIMove();
 
+    void refreshMoveList();
+    void openSGFByDialog();
+    void saveSGFByDialog();
+    void openReviewDialog();
+
+    void syncReplayCacheFromGame();
+    void rebuildWinRateCurve(int uptoStep);
+    void updateAnalysisLabels();
+
+    bool isTwoPasses() const;
+    double estimateBlackLead(const Game& state) const;
+    double estimateBlackWinRate(const Game& state) const;
+
     QString moveToString(int x, int y) const ;
     QString stoneToString(Stone color) const ;
 };
+ 

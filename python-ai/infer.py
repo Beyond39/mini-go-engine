@@ -44,7 +44,7 @@ def main():
 
     model_path = sys.argv[1]
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cpu")
 
     model = SmallGoNet().to(device)
     state_dict = torch.load(model_path, map_location=device)

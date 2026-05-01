@@ -1,5 +1,7 @@
 #pragma once
 
+#include <vector>
+
 struct EvaluationResult
 {
     float value = 0.0f;

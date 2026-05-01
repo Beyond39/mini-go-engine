@@ -10,8 +10,11 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QListWidget>
+#include <QListWidgetItem>
 #include <QDir>
+#include <QDirIterator>
 #include <QFileDialog>
+#include <QFileInfo>
 
 HomePage::HomePage(QWidget *parent)
     : QWidget(parent),
@@ -70,13 +73,22 @@ void HomePage::setupUI()
             border-radius: 8px;
             padding: 10px 14px;
         }
+        QPushButton#primaryButton {
+            background: #6f5435;
+            color: #fffaf2;
+            border: 1px solid #5c452c;
+            font-weight: 700;
+        }
         QPushButton:hover {
             background: #f3eee6;
+        }
+        QPushButton#primaryButton:hover { 
+            background: #7d6040; 
         }
         QPushButton:pressed {
             background: #e9dfd0;
         }
-            QListWidget {
+        QListWidget {
             background: #ffffff;
             border: 1px solid #e0d8cc;
             border-radius: 12px;
@@ -88,8 +100,9 @@ void HomePage::setupUI()
             border-radius: 6px;
         }
 
-        QListWidget::item:hover {
-            background: #f5efe6;
+        QListWidget::item:selected {
+            background: #8a6a43;
+            color: #fffaf2;
         }
 
         QComboBox {
@@ -174,9 +187,10 @@ void HomePage::setupUI()
     startButton = new QPushButton("开始游戏", heroCard) ;
     startButton->setObjectName("primaryButton") ; 
 
-    sgfListWidget = new QListWidget(this) ;
-
     continueButton = new QPushButton("继续最近对局", heroCard) ;
+    continueButton->setEnabled(false);
+    continueButton->setToolTip("当前版本未保存最近对局状态，建议使用“打开棋谱”。");
+
     openSgfButton = new QPushButton("打开棋谱", heroCard) ;
     rulesButton = new QPushButton("规则说明", heroCard) ;
 
@@ -195,55 +209,52 @@ void HomePage::setupUI()
     listsRow->setSpacing(18) ;
     
     // 热门棋谱 
-    auto *popularCard = new QFrame(this) ;
-    popularCard->setObjectName("listCard") ;
+    auto* sgfCard = new QFrame(this);
+    sgfCard->setObjectName("listCard");
 
-    auto *popularLayout = new QVBoxLayout(popularCard) ;
-    popularLayout->setContentsMargins(18, 16, 18, 16) ;
-    popularLayout->setSpacing(12) ;
+    auto* sgfLayout = new QVBoxLayout(sgfCard);
+    sgfLayout->setContentsMargins(18, 16, 18, 16);
+    sgfLayout->setSpacing(12);
 
-    auto *popularTitle = new QLabel("最近流行棋谱", popularCard) ;
-    popularTitle->setObjectName("sectionTitle");
+    auto* sgfTitle = new QLabel("本地棋谱", sgfCard);
+    sgfTitle->setObjectName("sectionTitle");
 
-    auto *popularHint = new QLabel("可作为复盘与后续训练样本的入口", popularCard);
-    popularHint->setObjectName("pageSubTitle");
+    auto* sgfHint = new QLabel("双击真实存在的 SGF 文件进入复盘", sgfCard);
+    sgfHint->setObjectName("pageSubTitle");
 
-    popularListWidget = new QListWidget(popularCard) ;
-    popularListWidget->addItem("LG杯：申真谞 vs 柯洁");
-    popularListWidget->addItem("春兰杯：朴廷桓 vs 辜梓豪");
-    popularListWidget->addItem("应氏杯：一力辽 vs 许家元");
-    popularListWidget->addItem("名人战：芈昱廷 vs 杨鼎新");
-    popularListWidget->setMinimumHeight(300) ;
+    popularListWidget = new QListWidget(sgfCard);
+    popularListWidget->setMinimumHeight(300);
 
-    popularLayout->addWidget(popularTitle);
-    popularLayout->addWidget(popularHint) ;
-    popularLayout->addWidget(popularListWidget , 1);
-    
-    // 本地存档
-    auto *archiveCard = new QFrame(this);
-    archiveCard->setObjectName("listCard");
+    sgfLayout->addWidget(sgfTitle);
+    sgfLayout->addWidget(sgfHint);
+    sgfLayout->addWidget(popularListWidget, 1);
 
-    auto *archiveLayout = new QVBoxLayout(archiveCard);
-    archiveLayout->setContentsMargins(18, 16, 18, 16);
-    archiveLayout->setSpacing(12) ;
+    auto* featureCard = new QFrame(this);
+    featureCard->setObjectName("listCard");
 
-    auto *archiveTitle = new QLabel("本地存档", archiveCard);
-    archiveTitle->setObjectName("sectionTitle") ;
+    auto* featureLayout = new QVBoxLayout(featureCard);
+    featureLayout->setContentsMargins(18, 16, 18, 16);
+    featureLayout->setSpacing(12);
 
-    auto *archiveHint = new QLabel("继续上次对局，或载入历史记录继续复盘", archiveCard);
-    archiveHint->setObjectName("pageSubTitle");
+    auto* featureTitle = new QLabel("项目功能", featureCard);
+    featureTitle->setObjectName("sectionTitle");
 
-    archiveListWidget = new QListWidget(archiveCard);
-    archiveListWidget->addItem("2026-04-04 | 人机对局 | 第 12 手");
-    archiveListWidget->addItem("2026-04-03 | 复盘模式 | 已完成");
-    archiveListWidget->addItem("2026-04-02 | 训练样本导入记录");
+    auto* featureHint = new QLabel("不再展示虚假的历史棋谱，改为展示真实功能状态", featureCard);
+    featureHint->setObjectName("pageSubTitle");
 
-    archiveLayout->addWidget(archiveTitle);
-    archiveLayout->addWidget(archiveHint) ;
-    archiveLayout->addWidget(archiveListWidget, 1);
+    archiveListWidget = new QListWidget(featureCard);
+    archiveListWidget->addItem("已实现：落子、提子、禁自杀、简单打劫");
+    archiveListWidget->addItem("已实现：SGF 打开 / 保存 / 主线复盘");
+    archiveListWidget->addItem("新增：对局研究小窗口，可自由试下");
+    archiveListWidget->addItem("新增：QPainter 胜率曲线展示");
+    archiveListWidget->addItem("建议：时间/读秒本版不展示，避免半成品");
 
-    listsRow->addWidget(popularCard, 1);
-    listsRow->addWidget(archiveCard, 1);
+    featureLayout->addWidget(featureTitle);
+    featureLayout->addWidget(featureHint);
+    featureLayout->addWidget(archiveListWidget, 1);
+
+    listsRow->addWidget(sgfCard, 1);
+    listsRow->addWidget(featureCard, 1);
 
     mainLayout->addWidget(heroCard);
     mainLayout->addLayout(listsRow, 1);
@@ -285,7 +296,7 @@ void HomePage::setupConnections()
         }
     });
 
-    connect(sgfListWidget, &QListWidget::itemDoubleClicked, this , [this](QListWidgetItem *item){
+    connect(popularListWidget, &QListWidget::itemDoubleClicked, this , [this](QListWidgetItem *item){
         if (!item){
             return ;
         }
@@ -303,23 +314,35 @@ void HomePage::setupConnections()
 }
 
 void HomePage::loadSGFList(){
-    QDir traindir("data/train_sgf") ;
-    QDir playdir("data/play_sgf") ;
+    popularListWidget->clear();
 
-    if (traindir.exists()) {
-        QStringList files = traindir.entryList(QStringList() << "*.sgf", QDir::Files);
-        for (const QString &file : files) {
-            QListWidgetItem* item = new QListWidgetItem("[train] " + file, sgfListWidget);
-            item->setData(Qt::UserRole, traindir.absoluteFilePath(file)); 
-        }
-    }
+    int count = 0;
+    const int maxShow = 200;
 
-    if (playdir.exists()) {
-        QStringList files = playdir.entryList(QStringList() << "*.sgf", QDir::Files);
-        for (const QString &file : files) {
-            QListWidgetItem* item = new QListWidgetItem("[play] " + file, sgfListWidget);
-            item->setData(Qt::UserRole, playdir.absoluteFilePath(file));
+    auto addFilesFrom = [&](const QString& rootPath, const QString& tag) {
+        QDir root(rootPath);
+        if (!root.exists()) {
+            return;
         }
+
+        QDirIterator it(root.absolutePath(), QStringList() << "*.sgf", QDir::Files, QDirIterator::Subdirectories);
+
+        while (it.hasNext() && count < maxShow) {
+            const QString path = it.next();
+            const QFileInfo info(path);
+            auto* item = new QListWidgetItem(QString("[%1] %2").arg(tag, info.fileName()), popularListWidget);
+            item->setData(Qt::UserRole, path);
+            item->setToolTip(path);
+            ++count;
+        }
+    };
+
+    addFilesFrom("data/play_sgf", "play");
+    addFilesFrom("data/train_sgf", "train");
+
+    if (count == 0) {
+        auto* item = new QListWidgetItem("暂无本地 SGF：可点击上方“打开棋谱”手动选择", popularListWidget);
+        item->setFlags(item->flags() & ~Qt::ItemIsSelectable & ~Qt::ItemIsEnabled);
     }
 }
 

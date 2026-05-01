@@ -9,7 +9,7 @@
 
 class MCTS{
 public:
-    MCTS(int iter = 200 , PythonEvaluator* eval = nullptr) ;
+    MCTS(int iter = 600 , PythonEvaluator* eval = nullptr) ;
     Move getbestMove(const Game &game) ;
 
 private:

@@ -1,7 +1,8 @@
 #pragma once
+#include <fstream>
 #include <string>
 #include <vector>
-#include "Game.h"
+#include "../core/Game.h"
 #include "../sgf/sgf_utils.h"
 
 class DataExtractor {

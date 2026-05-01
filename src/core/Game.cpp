@@ -28,17 +28,11 @@ bool Game::isKo(int x , int y ,Stone color) const{
         return false ;
     }
 
-    if (history.size() == 1 || history.empty()){
-        return false ;
+    if (history.size() < 2) {
+        return false;
     }
 
-    if (history.size() > 1){
-        if (nextBoard == history[history.size() - 2].boards ){
-            return true ;
-        }
-    }
-
-    return false ;
+    return nextBoard == history[history.size() - 2].boards;
 }
 
 bool Game::playMove(int x, int y){
@@ -82,16 +76,16 @@ bool Game::undo(){
     }
 
     history.pop_back() ;
+
     if (history.empty()){
         currentBoard = Board() ;
+        currentPlayer = Stone::BLACK;
+        return true;
     }
 
-    else{
-        currentBoard = history[history.size() - 1].boards ;
-    }
-    currentPlayer = history[history.size() - 2].color ;
-
-    return true ;
+    currentBoard = history.back().boards;
+    currentPlayer = currentBoard.opponent(history.back().color);
+    return true;
 }
 
 bool Game::loadFromMoves(const std::vector<Move>& moves){

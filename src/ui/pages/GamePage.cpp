@@ -1,6 +1,8 @@
 #include "GamePage.h"
 #include "BoardWidget.h"
 #include "core/Board.h"
+#include "WinRateChartWidget.h"
+#include "ReviewDialog.h"
 #include "../sgf/sgf_writer.h"
 #include "../sgf/sgf_utils.h"
 #include "../../ai/PythonEvaluator.h"
@@ -15,11 +17,18 @@
 #include <QFont>
 #include <QFrame>
 #include <QGroupBox>
-#include <QDialog>
 #include <QMessageBox>
 #include <QDateTime>
 #include <QFileDialog>
-#include <QtConcurrent>
+#include <QDialog>
+#include <QDir>
+#include <QFileInfo>
+#include <QCoreApplication>
+#include <QDebug>
+#include <QtConcurrent/QtConcurrent>
+#include <QtGlobal>
+
+#include <cmath>
 
 GamePage::GamePage(QWidget *parent)
     : QWidget(parent),
@@ -37,7 +46,9 @@ GamePage::GamePage(QWidget *parent)
       openSGFButton(nullptr),
       saveSGFButton(nullptr),
       stepForward(nullptr) ,
-      stepBackward(nullptr)
+      stepBackward(nullptr) ,
+      winRateChart(nullptr) ,
+      reviewButton(nullptr)
 {
     setupUI();
     setupConnections();
@@ -46,41 +57,57 @@ GamePage::GamePage(QWidget *parent)
     aiWatcher = new QFutureWatcher<Move>(this);
 
     connect(aiWatcher, &QFutureWatcher<Move>::finished, this, [this]() {
+        Move aiMove = aiWatcher->result();
+
         aiThinking = false;
         boardwidget->setEnabled(true);
 
-        Move aiMove = aiWatcher->result();
+        bool applied = false;
+        QString message;
 
-        if (aiMove.isPass) {
-            game.playPass();
-        } else {
-            game.playMove(aiMove.x, aiMove.y);
+        if (!aiEnabled) {
+            updatePage();
+            return;
         }
 
+        if (game.getCurrentPlayer() != aiColor) {
+            updatePage();
+            return;
+        }
+
+        if (aiMove.isPass || aiMove.x < 0 || aiMove.y < 0) {
+            applied = game.playPass();
+            message = "AI 选择停一手";
+        } else {
+            applied = game.playMove(aiMove.x, aiMove.y);
+            message = QString("AI 落子：%1").arg(moveToString(aiMove.x, aiMove.y));
+        }
+
+        if (!applied) {
+            game.playPass();
+            message = "AI 返回非法落点，已自动停一手";
+        }
+
+        boardwidget->loadGame(game);
+        syncReplayCacheFromGame();
+        rebuildWinRateCurve(replayIndex);
         updatePage();
-        statusLabel->setText("AI 已完成落子");
+
+        if (isTwoPasses()) {
+            currentTurnLabel->setText("当前状态：对局结束");
+            message = "双方连续停一手，对局结束";
+        }
+
+        statusLabel->setText(message);
     });
 
-    QString appDir = QCoreApplication::applicationDirPath();
-    QDir dir(appDir);
-
-    dir.cdUp();
-
-    QString scriptPath = dir.filePath("python-ai/infer.py");
-    QString modelPath  = dir.filePath("python-ai/checkpoints/go_model_best.pth");
-
-    evaluator = std::make_unique<PythonEvaluator>(
-        "python",
-        scriptPath,
-        modelPath
-    );
-
-    mcts = std::make_unique<MCTS>(10000, evaluator.get());
+    scriptPath = "E:/vscode-code/GoEngine/python-ai/infer.py";
+    modelPath = "E:/vscode-code/GoEngine/python-ai/checkpoints/go_model_best.pth";
 }
 
 GamePage::~GamePage() = default;
-void GamePage::setupUI()
-{
+
+void GamePage::setupUI(){
     // 给当前页面命名，方便样式表只作用在这个页面上
     setObjectName("gamePage");
 
@@ -140,6 +167,20 @@ void GamePage::setupUI()
             border-radius: 8px;
             padding: 4px;
         }
+
+        QListWidget::item {
+            padding: 7px 6px;
+            border-radius: 6px;
+        }
+
+        QListWidget::item:hover {
+            background: #f5efe6;
+        }
+
+        QListWidget::item:selected {
+            background: #8a6a43;
+            color: #fffaf2;
+        }
     )");
 
     // 第一部分的界面
@@ -155,18 +196,19 @@ void GamePage::setupUI()
     backButton = new QPushButton("返回首页" , this) ;
     backButton->setMinimumHeight(36);
     
-    QString str = aiEnabled ? "人机对局" : "双人对局" ;
-    auto *titleLabel = new QLabel(str , this) ;
+    auto *titleLabel = new QLabel("围棋对局", this);
     QFont titleFont ;
     titleFont.setPointSize(16) ;
     titleFont.setBold(true) ;
     titleLabel->setFont(titleFont) ;
 
-    statusLabel = new QLabel("黑方：玩家   白方：AI   模式：人机对局" , this) ;
+    statusLabel = new QLabel("准备开始", this);
+    statusLabel->setMinimumWidth(360);
+    statusLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
 
     topBarLayout->addWidget(backButton, 0, 0, Qt::AlignLeft) ;
-    topBarLayout->addWidget(titleLabel, 0, 0, Qt::AlignCenter) ;
-    topBarLayout->addWidget(statusLabel, 0, 0 , Qt::AlignRight) ;
+    topBarLayout->addWidget(titleLabel, 0, 1, Qt::AlignCenter) ;
+    topBarLayout->addWidget(statusLabel, 0, 2, Qt::AlignRight) ;
 
 
     // 第二部分主体区域，左边棋盘，右边构建信息
@@ -182,7 +224,7 @@ void GamePage::setupUI()
     boardLayout->setContentsMargins(12, 12, 12, 12);
     boardLayout->setSpacing(8);
 
-    auto *boardTitle = new QLabel("棋盘区域" ,boardPanel);
+    auto *boardTitle = new QLabel("棋盘" ,boardPanel);
     boardTitle->setAlignment(Qt::AlignCenter) ;
 
     boardwidget = new BoardWidget(boardPanel) ;
@@ -203,37 +245,23 @@ void GamePage::setupUI()
     auto *gameInfoBox = new QGroupBox("对局信息", rightPanel) ;
     auto *gameInfoLayout = new QVBoxLayout(gameInfoBox) ;
 
-    gameInfoLayout->addWidget(new QLabel("当前模式：人机对局", gameInfoBox)) ;
-    gameInfoLayout->addWidget(new QLabel("黑方：玩家", gameInfoBox)) ;
-    gameInfoLayout->addWidget(new QLabel("白方：AI", gameInfoBox)) ;
-
-    currentTurnLabel = new QLabel("当前轮到：黑方", gameInfoBox) ;
-    gameInfoLayout->addWidget(currentTurnLabel) ;
-    gameInfoLayout->addWidget(new QLabel("用时：60分钟 / 3次30秒", gameInfoBox)) ;
+    gameInfoLayout->addWidget(new QLabel("模式：人机对局 / 本地双人", gameInfoBox));
+    gameInfoLayout->addWidget(new QLabel("说明：黑白双方轮流落子，支持 SGF 保存与复盘", gameInfoBox));
+    currentTurnLabel = new QLabel("当前轮到：黑方", gameInfoBox);
+    gameInfoLayout->addWidget(currentTurnLabel);
     
     // AI分析区
     auto *analysisBox = new QGroupBox("AI 分析" , rightPanel) ;
     auto *analysisLayout = new QVBoxLayout(analysisBox) ;
     analysisLayout->setSpacing(6);
 
-    winRateLabel = new QLabel("胜率：黑 50.0%", analysisBox);
-    scoreLabel = new QLabel("目差：黑领先 0.0 目", analysisBox);
+    winRateLabel = new QLabel("胜率：黑 50.0% / 白 50.0%", analysisBox);
+    scoreLabel = new QLabel("形势：均势", analysisBox);
+    winRateChart = new WinRateChartWidget(analysisBox);
+
     analysisLayout->addWidget(winRateLabel);
     analysisLayout->addWidget(scoreLabel);
-
-    auto *chartPlaceholder = new QFrame(analysisBox) ;
-    chartPlaceholder->setObjectName("chartPlaceholder");  
-    chartPlaceholder->setMinimumHeight(180) ;
-
-    auto *chartLayout = new QVBoxLayout(chartPlaceholder) ;
-    auto *chartText = new QLabel("胜率折线图区", chartPlaceholder) ;
-    chartText->setAlignment(Qt::AlignCenter) ;
-
-    chartLayout->addStretch() ;
-    chartLayout->addWidget(chartText) ;
-    chartLayout->addStretch() ;
-
-    analysisLayout->addWidget(chartPlaceholder) ;
+    analysisLayout->addWidget(winRateChart);
 
     // 手术记录区
     auto *moveListBoxGroup = new QGroupBox("手数记录", rightPanel);
@@ -245,6 +273,7 @@ void GamePage::setupUI()
     // 操作区
     auto *controlBox = new QGroupBox("操作", rightPanel) ;
     auto *controlLayout = new QVBoxLayout(controlBox) ;
+    controlLayout->setSpacing(8);
 
     passButton = new QPushButton("停一手", controlBox) ;
     undoButton = new QPushButton("悔棋", controlBox) ;
@@ -252,17 +281,17 @@ void GamePage::setupUI()
     restartButton = new QPushButton("重新开始", controlBox) ;
     openSGFButton = new QPushButton("打开棋谱", controlBox) ;
     saveSGFButton = new QPushButton("保存棋谱", controlBox) ;
+    reviewButton = new QPushButton("对局研究", controlBox);
     stepForward = new QPushButton("上一手", controlBox) ;
     stepBackward = new QPushButton("下一手", controlBox) ;
 
-    passButton->setMinimumHeight(40) ;
-    undoButton->setMinimumHeight(40) ;
-    resignButton->setMinimumHeight(40) ;
-    restartButton->setMinimumHeight(40) ;
-    openSGFButton->setMinimumHeight(40);
-    saveSGFButton->setMinimumHeight(40) ;
-    stepForward->setMinimumHeight(40) ;
-    stepBackward->setMinimumHeight(40) ; 
+    QList<QPushButton*> buttons = {
+        passButton, undoButton, resignButton, restartButton,
+        openSGFButton, saveSGFButton, reviewButton, stepForward, stepBackward
+    };
+    for (QPushButton* button : buttons) {
+        button->setMinimumHeight(38);
+    }
 
     controlLayout->addWidget(passButton) ;
     controlLayout->addWidget(undoButton) ;
@@ -270,6 +299,7 @@ void GamePage::setupUI()
     controlLayout->addWidget(restartButton) ;
     controlLayout->addWidget(openSGFButton) ;
     controlLayout->addWidget(saveSGFButton) ;
+    controlLayout->addWidget(reviewButton);
     controlLayout->addWidget(stepForward) ;
     controlLayout->addWidget(stepBackward) ;
 
@@ -281,7 +311,7 @@ void GamePage::setupUI()
 
     // 左右拼装
     contentLayout->addWidget(boardPanel, 5);
-    contentLayout->addWidget(rightPanel, 3);
+    contentLayout->addWidget(rightPanel, 2);
 
     // 总体拼装
     mainLayout->addLayout(topBarLayout);
@@ -301,12 +331,17 @@ void GamePage::resetInfoPanel(){
     } else {
         statusLabel->setText("模式：双人对局 | 黑方：玩家 | 白方：玩家");
     }
-    winRateLabel->setText("胜率：黑 50.0%");
-    scoreLabel->setText("目差：黑领先 0.0 目");
+    winRates.clear();
+    winRates.push_back(50.0);
+    if (winRateChart) {
+        winRateChart->setRates(winRates);
+    }
+
+    winRateLabel->setText("胜率：黑 50.0% / 白 50.0%");
+    scoreLabel->setText("形势：均势");
 }
 
-void GamePage::setupConnections()
-{
+void GamePage::setupConnections(){
     connect(backButton, &QPushButton::clicked, this, [=]() {
         emit backToHomeRequested();
     });
@@ -315,42 +350,47 @@ void GamePage::setupConnections()
     connect(undoButton, &QPushButton::clicked, boardwidget, &BoardWidget::undoLastMove);
     connect(restartButton, &QPushButton::clicked,  this, &GamePage::startNewGame);
     connect(resignButton, &QPushButton::clicked, boardwidget, &BoardWidget::resignCurrentPlayer);
+    connect(openSGFButton, &QPushButton::clicked, this, &GamePage::openSGFByDialog);
+    connect(saveSGFButton, &QPushButton::clicked, this, &GamePage::saveSGFByDialog);
+    connect(reviewButton, &QPushButton::clicked, this, &GamePage::openReviewDialog);
     connect(stepForward, &QPushButton::clicked, this ,GamePage::goForward) ;
     connect(stepBackward, &QPushButton::clicked, this , GamePage::goBackward) ;
 
+    connect(moveListWidget, &QListWidget::itemClicked, this, [this](QListWidgetItem* item) {
+        if (!item || aiThinking || currentMoves.empty()) {
+            return;
+        }
+        goToStep(moveListWidget->row(item) + 1);
+    });
+
     connect(boardwidget, &BoardWidget::movePlayed, this, [this](int x, int y, Stone color) {
         game = boardwidget->getGame();
-        
-        int moveNumber = moveListWidget->count() + 1;
-        QString text = QString("%1. %2 %3")
-            .arg(moveNumber)
-            .arg(stoneToString(color))
-            .arg(moveToString(x, y));
-        moveListWidget->addItem(text);
-        currentTurnLabel->setText(QString("当前轮到：%1方").arg(stoneToString(game.getCurrentPlayer())));
-        statusLabel->setText(QString("最近一步：%1").arg(text));
+        syncReplayCacheFromGame();
+        rebuildWinRateCurve(replayIndex);
+        updatePage();
+        statusLabel->setText(QString("最近一步：%1 %2").arg(stoneToString(color), moveToString(x, y)));
 
-        tryAIMove() ;
+        tryAIMove();
     });
 
     connect(boardwidget, &BoardWidget::passPlayed, this, [this](Stone color) {
         game = boardwidget->getGame();
+        syncReplayCacheFromGame();
+        rebuildWinRateCurve(replayIndex);
+        updatePage();
+        statusLabel->setText(QString("最近一步：%1 停一手").arg(stoneToString(color)));
 
-        int moveNumber = moveListWidget->count() + 1;
-        QString text = QString("%1. %2 停一手")
-            .arg(moveNumber)
-            .arg(stoneToString(color));
-        moveListWidget->addItem(text);
-        currentTurnLabel->setText(QString("当前轮到：%1方").arg(stoneToString(game.getCurrentPlayer())));
-        statusLabel->setText(QString("最近一步：%1").arg(text));
-
-        tryAIMove() ;
+        if (!isTwoPasses()) {
+            tryAIMove();
+        }
     });
 
     connect(boardwidget, &BoardWidget::moveUndone, this, [this]() {
         game = boardwidget->getGame();
         aiThinking = false;
         boardwidget->setEnabled(true);
+        syncReplayCacheFromGame();
+        rebuildWinRateCurve(replayIndex);
         updatePage();
         statusLabel->setText("已悔棋一手");
     });
@@ -375,56 +415,19 @@ void GamePage::setupConnections()
         currentTurnLabel->setText("当前轮到：对局结束");
         statusLabel->setText(message);
     });
-
-    connect(saveSGFButton, &QPushButton::clicked , this, [this](){
-        if (game.getHistory().empty()){
-            QMessageBox::information(this, "提示" , "当前没有可以保存的棋谱") ;
-            return  ;
-        } 
-
-        QString timestamp = QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss") ;
-
-        QString defaultPath = QDir::currentPath() + "/data/play_sgf/game_" + timestamp + ".sgf";
-
-        QString filename = QFileDialog::getOpenFileName(
-            this ,
-            "保存 SGF 文件" ,
-            defaultPath ,
-            "SGF Files (*.sgf)"
-        );
-
-        if (filename.isEmpty()){
-            return ;
-        }
-
-        std::vector<Move> movesToSave = convertHistoryToMoves(game.getHistory()) ;
-        bool success = SGFWriter::saveMainLine(filename.toLocal8Bit().toStdString(), movesToSave);
-
-        if (success){
-            QMessageBox::information(this, "成功", "棋谱保存成功！");
-        }
-        else{
-            QMessageBox::information(this ,"失败" , "棋谱保存失败") ;
-        }
-    });
 }
 
-QString GamePage::moveToString(int x, int y) const
-{
+QString GamePage::moveToString(int x, int y) const{
     QString columns = "ABCDEFGHJKLMNOPQRST"; 
 
     if (x < 0 || x >= columns.size()) {
-        return "(" + QString::number(x) + "," + QString::number(y) + ")";
+        return QString("(%1,%2)").arg(x).arg(y);
     }
 
-    QString col = QString(columns[x]); 
-    QString row = QString::number(19 - y); 
-
-    return col + row; 
+    return QString("%1%2").arg(columns[x]).arg(19 - y);
 }
 
-QString GamePage::stoneToString(Stone color) const
-{
+QString GamePage::stoneToString(Stone color) const{
     if (color == Stone::BLACK) {
         return "黑";
     }
@@ -451,66 +454,69 @@ void GamePage::loadSGFFile(const QString& path){
         return;
     }
 
-    updatePage() ;
+    replayIndex = static_cast<int>(currentMoves.size());
+    boardwidget->loadGame(game);
+    rebuildWinRateCurve(replayIndex);
+    updatePage();
+    statusLabel->setText("棋谱已载入");
 }
 
 void GamePage::updatePage(){
-    boardwidget->loadGame(game) ;
-
-    moveListWidget->clear() ;
-    const auto& history = game.getHistory();
-
-    for (int i = 0; i < history.size(); ++i) {
-        const RecordMove& move = history[i];
-
-        QString text;
-
-        QString colorText = (move.color == Stone::BLACK) ? "黑" : "白";
-
-        if (move.isPass) {
-            text = QString("%1. %2 停一手")
-                   .arg(i + 1)
-                   .arg(colorText);
-        } else {
-            text = QString("%1. %2 (%3,%4)")
-                   .arg(i + 1)
-                   .arg(colorText)
-                   .arg(move.x)
-                   .arg(move.y);
-        }
-
-        moveListWidget->addItem(text);
-    }
-
-    QString turnText;
+    boardwidget->loadGame(game);
+    refreshMoveList();
 
     if (game.getCurrentPlayer() == Stone::BLACK) {
-        turnText = "当前轮到：黑方";
+        currentTurnLabel->setText("当前轮到：黑方");
     } else {
-        turnText = "当前轮到：白方";
+        currentTurnLabel->setText("当前轮到：白方");
     }
 
-    statusLabel->setText(turnText);
+    updateAnalysisLabels();
+}
+
+void GamePage::refreshMoveList()
+{
+    moveListWidget->clear();
+
+    std::vector<Move> movesToShow = currentMoves;
+    if (movesToShow.empty() && !game.getHistory().empty()) {
+        movesToShow = convertHistoryToMoves(game.getHistory());
+    }
+
+    for (int i = 0; i < (int)movesToShow.size(); ++i) {
+        const Move& move = movesToShow[i];
+        QString colorText = stoneToString(move.stone);
+        if (move.stone == Stone::EMPTY) {
+            colorText = (i % 2 == 0) ? "黑" : "白";
+        }
+
+        QString text;
+        if (move.isPass) {
+            text = QString("%1. %2 停一手").arg(i + 1).arg(colorText);
+        } else {
+            text = QString("%1. %2 %3").arg(i + 1).arg(colorText, moveToString(move.x, move.y));
+        }
+
+        auto* item = new QListWidgetItem(text, moveListWidget);
+        if (i >= replayIndex) {
+            item->setForeground(QColor(145, 137, 126));
+        }
+    }
+
+    if (replayIndex > 0 && replayIndex <= moveListWidget->count()) {
+        moveListWidget->setCurrentRow(replayIndex - 1);
+    } else {
+        moveListWidget->clearSelection();
+    }
 }
 
 void GamePage::setAIMode(bool enabled, Stone color){
-    aiEnabled = enabled ;
-    aiColor = color ;
-    boardwidget->setAIEnabled(enabled) ;
-    boardwidget->setAIcolor(color) ;
+    aiEnabled = enabled;
+    aiColor = color;
+    boardwidget->setAIEnabled(enabled);
+    boardwidget->setAIcolor(color);
 
-    if (aiEnabled) {
-        if (aiColor == Stone::WHITE) {
-            statusLabel->setText("模式：人机对局 | 黑方：玩家 | 白方：AI");
-        } else {
-            statusLabel->setText("模式：人机对局 | 黑方：AI | 白方：玩家");
-        }
-    } else {
-        statusLabel->setText("模式：双人对局 | 黑方：玩家 | 白方：玩家");
-    }
-    
-    winRateLabel->setText("胜率：黑 50.0%");
-    scoreLabel->setText("目差：黑领先 0.0 目");
+    resetInfoPanel();
 }
 
 void GamePage::startNewGame(){
@@ -525,36 +531,39 @@ void GamePage::startNewGame(){
     boardwidget->loadGame(game); 
 
     resetInfoPanel();
+    syncReplayCacheFromGame();
+    rebuildWinRateCurve(replayIndex);
+    updatePage();
     statusLabel->setText("已重新开始");
 
+    if (aiEnabled && aiColor == Stone::BLACK){
+        QTimer::singleShot(200, this, [this]() {
+            tryAIMove();
+        });
+    }
 }
 
 void GamePage::goToStep(int n){
-    if (n < 0){
-        n = 0 ;
+    if (currentMoves.empty()) {
+        currentMoves = convertHistoryToMoves(game.getHistory());
     }
 
-    if (n > (int)currentMoves.size()){
-        n = (int)currentMoves.size() ;
-    }
+    n = qBound(0, n, static_cast<int>(currentMoves.size()));
 
-    int time = 0 ;
-    game.reset() ;
-
-    while (time < n){
-        if (currentMoves[time].isPass) {
-            game.playPass();
-        } else {
-            int x = currentMoves[time].x;
-            int y = currentMoves[time].y;
-            game.playMove(x, y);
+    Game replayGame;
+    for (int i = 0; i < n; ++i) {
+        const Move& move = currentMoves[i];
+        bool ok = move.isPass ? replayGame.playPass() : replayGame.playMove(move.x, move.y);
+        if (!ok) {
+            break;
         }
-        time++;
     }
-    replayIndex = n ;
 
-    updatePage() ;
-    boardwidget->loadGame(game) ;
+    game = replayGame;
+    replayIndex = n;
+    rebuildWinRateCurve(replayIndex);
+    updatePage();
+    statusLabel->setText(QString("已跳转到第 %1 手").arg(replayIndex));
 } 
 
 void GamePage::goForward(){
@@ -569,28 +578,207 @@ void GamePage::goBackward(){
     goToStep(n+1) ;
 }
 
-void GamePage::tryAIMove(){
-    if (!aiEnabled || !mcts)
+void GamePage::tryAIMove()
+{
+    if (!aiEnabled || game.getCurrentPlayer() != aiColor || aiThinking) {
         return;
-
-    if (game.getCurrentPlayer() != aiColor)
-        return;
-
-    if (aiThinking){
-        return ; 
     }
 
-    aiThinking = true ;
-
-    boardwidget->setEnabled(false); 
-    statusLabel->setText("AI 思考中");
+    aiThinking = true;
+    boardwidget->setEnabled(false);
+    statusLabel->setText("AI 思考中...");
 
     Game gameCopy = game;
+    const QString pythonExe = "D:/conda/envs/goengine-ai/python.exe";
+    const QString localScriptPath = scriptPath;
+    const QString localModelPath = modelPath;
 
-    auto future = QtConcurrent::run([this, gameCopy]() mutable {
-        return mcts->getbestMove(gameCopy);
-    });
+    auto future = QtConcurrent::run(
+        [gameCopy, pythonExe, localScriptPath, localModelPath]() mutable -> Move {
+            PythonEvaluator evaluator(pythonExe, localScriptPath, localModelPath);
+            PythonEvaluator* evaluatorPtr = nullptr;
+
+            if (evaluator.start()) {
+                evaluatorPtr = &evaluator;
+            }
+
+            MCTS search(evaluatorPtr ? 80 : 60, evaluatorPtr);
+            Move bestMove = search.getbestMove(gameCopy);
+
+            evaluator.stop();
+            return bestMove;
+        }
+    );
 
     aiWatcher->setFuture(future);
 }
 
+void GamePage::openSGFByDialog()
+{
+    QString filename = QFileDialog::getOpenFileName(
+        this,
+        "打开 SGF 棋谱",
+        QDir::currentPath(),
+        "SGF Files (*.sgf);;All Files (*)"
+    );
+
+    if (!filename.isEmpty()) {
+        setAIMode(false, Stone::WHITE);
+        loadSGFFile(filename);
+    }
+}
+
+void GamePage::saveSGFByDialog()
+{
+    if (game.getHistory().empty()) {
+        QMessageBox::information(this, "提示", "当前没有可以保存的棋谱");
+        return;
+    }
+
+    const QString saveDir = QDir::currentPath() + "/data/play_sgf";
+    QDir().mkpath(saveDir);
+
+    const QString timestamp = QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss");
+    const QString defaultPath = saveDir + "/game_" + timestamp + ".sgf";
+
+    QString filename = QFileDialog::getSaveFileName(
+        this,
+        "保存 SGF 文件",
+        defaultPath,
+        "SGF Files (*.sgf)"
+    );
+
+    if (filename.isEmpty()) {
+        return;
+    }
+
+    if (!filename.endsWith(".sgf", Qt::CaseInsensitive)) {
+        filename += ".sgf";
+    }
+
+    const std::vector<Move> movesToSave = convertHistoryToMoves(game.getHistory());
+    const bool success = SGFWriter::saveMainLine(filename.toLocal8Bit().toStdString(), movesToSave);
+
+    if (success) {
+        QMessageBox::information(this, "成功", "棋谱保存成功！");
+    } else {
+        QMessageBox::warning(this, "失败", "棋谱保存失败");
+    }
+}
+
+void GamePage::openReviewDialog(){
+    ReviewDialog dialog(game, this);
+    dialog.exec();
+}
+
+void GamePage::syncReplayCacheFromGame(){
+    currentMoves = convertHistoryToMoves(game.getHistory());
+    replayIndex = (int)currentMoves.size();
+}
+
+bool GamePage::isTwoPasses() const
+{
+    const auto& history = game.getHistory();
+    return history.size() >= 2 && history[history.size() - 1].isPass && history[history.size() - 2].isPass;
+}
+
+void GamePage::rebuildWinRateCurve(int uptoStep){
+    winRates.clear();
+    winRates.push_back(50.0);
+
+    Game tmp;
+    const int limit = qBound(0, uptoStep, (int)currentMoves.size());
+
+    for (int i = 0; i < limit; ++i) {
+        const Move& move = currentMoves[i];
+        const bool ok = move.isPass ? tmp.playPass() : tmp.playMove(move.x, move.y);
+        if (!ok) {
+            break;
+        }
+
+        winRates.push_back(estimateBlackWinRate(tmp));
+    }
+
+    if (winRateChart) {
+        winRateChart->setRates(winRates);
+    }
+    updateAnalysisLabels();
+}
+
+double GamePage::estimateBlackLead(const Game& state) const{
+    const Board& board = state.getBoard();
+
+    double blackScore = 0.0;
+    double whiteScore = 6.5; 
+
+    const int dx[4] = {1, -1, 0, 0};
+    const int dy[4] = {0, 0, 1, -1};
+
+    for (int x = 0; x < Board::SIZE; ++x) {
+        for (int y = 0; y < Board::SIZE; ++y) {
+            Stone s = board.get(x, y);
+            if (s == Stone::BLACK) {
+                blackScore += 1.0;
+                continue;
+            }
+            if (s == Stone::WHITE) {
+                whiteScore += 1.0;
+                continue;
+            }
+
+            bool nearBlack = false;
+            bool nearWhite = false;
+            for (int k = 0; k < 4; ++k) {
+                const int nx = x + dx[k];
+                const int ny = y + dy[k];
+                if (nx < 0 || nx >= Board::SIZE || ny < 0 || ny >= Board::SIZE) {
+                    continue;
+                }
+
+                Stone ns = board.get(nx, ny);
+                if (ns == Stone::BLACK) {
+                    nearBlack = true;
+                } else if (ns == Stone::WHITE) {
+                    nearWhite = true;
+                }
+            }
+
+            if (nearBlack && !nearWhite) {
+                blackScore += 0.35;
+            } else if (nearWhite && !nearBlack) {
+                whiteScore += 0.35;
+            }
+        }
+    }
+
+    return blackScore - whiteScore;
+}
+
+double GamePage::estimateBlackWinRate(const Game& state) const{
+    const double lead = estimateBlackLead(state);
+    const double rate = 100.0 / (1.0 + std::exp(-lead / 10.0));
+    return qBound(3.0, rate, 97.0);
+}
+
+void GamePage::updateAnalysisLabels(){
+    double blackRate = 50.0;
+    if (!winRates.empty()) {
+        blackRate = winRates.back();
+    } else {
+        blackRate = estimateBlackWinRate(game);
+    }
+
+    const double whiteRate = 100.0 - blackRate;
+    winRateLabel->setText(QString("胜率：黑 %1% / 白 %2%")
+                          .arg(blackRate, 0, 'f', 1)
+                          .arg(whiteRate, 0, 'f', 1));
+
+    const double lead = estimateBlackLead(game);
+    if (std::abs(lead) < 0.6) {
+        scoreLabel->setText("形势：均势");
+    } else if (lead > 0) {
+        scoreLabel->setText(QString("形势：黑领先约 %1 目").arg(lead, 0, 'f', 1));
+    } else {
+        scoreLabel->setText(QString("形势：白领先约 %1 目").arg(-lead, 0, 'f', 1));
+    }
+}

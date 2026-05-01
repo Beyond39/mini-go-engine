@@ -1,5 +1,7 @@
 from pathlib import Path
+import random
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
@@ -7,6 +9,19 @@ from torch.utils.data import DataLoader
 from dataset import GoBinDataset
 from model import SmallGoNet
 
+VALUE_LOSS_WEIGHT = 0.1
+BATCH_SIZE = 64
+EPOCHS = 8
+LEARNING_RATE = 1e-3
+LOG_INTERVAL = 200
+SEED = 42
+
+def set_seed(seed: int = SEED) -> None:
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
 
 def evaluate(model, dataloader, device):
     model.eval()
@@ -27,7 +42,7 @@ def evaluate(model, dataloader, device):
 
             policy_loss = F.cross_entropy(policy_logits, y)
             value_loss = F.mse_loss(value_pred, z)
-            loss = policy_loss + value_loss
+            loss = policy_loss + 0.1 * value_loss
 
             total_loss += loss.item()
             total_policy_loss += policy_loss.item()
@@ -59,7 +74,7 @@ def train():
     if not val_bin.exists():
         raise FileNotFoundError(f"Val bin not found: {val_bin}")
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cpu")
     print(f"Using device: {device}")
 
     train_dataset = GoBinDataset(train_bin)
@@ -68,13 +83,9 @@ def train():
     print(f"Train samples: {len(train_dataset)}")
     print(f"Val samples: {len(val_dataset)}")
 
-    batch_size = 64
-    epochs = 5
-    log_interval = 500
-
     train_loader = DataLoader(
         train_dataset,
-        batch_size=batch_size,
+        batch_size=BATCH_SIZE,
         shuffle=True,
         num_workers=0,
         pin_memory=(device.type == "cuda"),
@@ -82,14 +93,14 @@ def train():
 
     val_loader = DataLoader(
         val_dataset,
-        batch_size=batch_size,
+        batch_size=BATCH_SIZE,
         shuffle=False,
         num_workers=0,
         pin_memory=(device.type == "cuda"),
     )
 
     model = SmallGoNet().to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
     best_val_loss = float("inf")
 
@@ -98,7 +109,7 @@ def train():
     print(f"Total val batches per epoch: {len(val_loader)}")
     print("-" * 80)
 
-    for epoch in range(1, epochs + 1):
+    for epoch in range(1, EPOCHS + 1):
         model.train()
 
         running_loss = 0.0
@@ -114,7 +125,7 @@ def train():
 
             policy_loss = F.cross_entropy(policy_logits, y)
             value_loss = F.mse_loss(value_pred, z)
-            loss = policy_loss + value_loss
+            loss = policy_loss + VALUE_LOSS_WEIGHT * value_loss
 
             optimizer.zero_grad()
             loss.backward()
@@ -124,7 +135,7 @@ def train():
             running_policy_loss += policy_loss.item()
             running_value_loss += value_loss.item()
 
-            if batch_idx % log_interval == 0 or batch_idx == len(train_loader):
+            if batch_idx % LOG_INTERVAL == 0 or batch_idx == len(train_loader):
                 avg_so_far = running_loss / batch_idx
                 avg_policy_so_far = running_policy_loss / batch_idx
                 avg_value_so_far = running_value_loss / batch_idx

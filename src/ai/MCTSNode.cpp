@@ -1,12 +1,14 @@
 #include "MCTSNode.h" 
 
-MCTSNode::MCTSNode(const Game &game ,const Move &move ,MCTSNode* parent, const std::vector<Move>& moves)
+MCTSNode::MCTSNode(const Game &game ,const Move &move ,MCTSNode* parent, const std::vector<Move>& moves, double prob)
         :game(game) ,
          move(move) ,
          parent(parent) ,
+         children() ,
          visits(0) ,
          wins(0.0) , 
-         untriedMoves(moves)
+         untriedMoves(moves) ,
+         policy_prob(prob)
 {
 }
 
@@ -25,21 +27,29 @@ bool MCTSNode::isLeaf() const{
     return children.empty() ;
 }
 
-MCTSNode* MCTSNode::getBestUCBChild(double c) const{
+MCTSNode* MCTSNode::getBestPUCTChild(double c_puct) const{
     MCTSNode* bestChild = nullptr;
     double bestValue = -1e100;
 
+    double parentVisits = std::max(1, visits);
+
     for (MCTSNode* child : children) {
-        if (child->visits == 0) {
-            return child;
+        double q_value = 0.0;
+
+        if (child->visits > 0) {
+            q_value = child->wins / child->visits;
         }
 
-        double exploit = child->wins / child->visits;
-        double explore = c * std::sqrt(std::log((double)visits) / child->visits);
-        double ucbValue = exploit + explore;
+        double u_value =
+            c_puct *
+            child->policy_prob *
+            std::sqrt(parentVisits) /
+            (1.0 + child->visits);
 
-        if (ucbValue > bestValue) {
-            bestValue = ucbValue;
+        double puctValue = q_value + u_value;
+
+        if (puctValue > bestValue) {
+            bestValue = puctValue;
             bestChild = child;
         }
     }

@@ -27,7 +27,6 @@ private:
 
     QListWidget *popularListWidget ;
     QListWidget *archiveListWidget ;
-    QListWidget *sgfListWidget ;
 
     QLabel *statusTagLabel ;
     QComboBox *modeComboBox ;

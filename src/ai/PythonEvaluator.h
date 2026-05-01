@@ -23,4 +23,5 @@ private:
     QProcess* process;
 
     QString boardToMessage(const Board& board, int currentPlayer) const;
+    QByteArray readLineWithTimeout(int timeoutMs);
 };

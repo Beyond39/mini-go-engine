@@ -4,11 +4,14 @@
 #include <QPoint>
 #include <QRectF>
 #include <QString>
+#include <QSoundEffect>
 #include "../core/Game.h"
+
 
 class QPainter;
 class QMouseEvent;
 class QPaintEvent;
+class QSoundEffect;
 class BoardWidget : public QWidget 
 {
     Q_OBJECT
@@ -22,6 +25,9 @@ public:
     void setAIEnabled(bool Enabled) ;
     void setAIcolor(Stone color) ;
     const Game& getGame() const;
+    int getMoveNumberAt(int x, int y) const;
+    bool forcePlayMove(int x, int y) ;
+    bool forcePass();
 
 public slots:
     void undoLastMove();
@@ -50,6 +56,7 @@ private:
     QString finishText;
     Stone aicolor ;
     bool aiEnabled ;
+    QSoundEffect* stoneSound = nullptr;
 
     int margin ;
     int cellSize ;
@@ -64,4 +71,8 @@ private:
     QPointF boardPoint(int x, int y) const;
     QPoint pixelToBoard(const QPoint &pos) const;
     void updateLastMoveFromHistory();
+    void checkGameEndAfterPass();
+
+    void setupSounds();
+    void playStoneSound();
 } ;

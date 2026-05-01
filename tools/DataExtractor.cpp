@@ -7,35 +7,34 @@
 #include <QFileInfoList>
 
 std::vector<float> DataExtractor::getBoardFeatures(const Game& game){
-    const int planeSize = Board::SIZE *Board::SIZE ;
-    std::vector<float> features(3 * planeSize , 0.0f) ;
+    const int planeSize = Board::SIZE * Board::SIZE;
+    std::vector<float> features(3 * planeSize, 0.0f);
 
-    const Board& board = game.getBoard() ;
-    Stone currentPlayer = game.getCurrentPlayer() ;
-    Stone oppPlayer = board.opponent(currentPlayer) ;
+    const Board& board = game.getBoard();
+    Stone currentPlayer = game.getCurrentPlayer();
 
-    for (int x = 0 ; x < Board::SIZE ; ++x){
-        for (int y = 0 ; y < Board::SIZE ; ++y){
-            Stone s = board.get(x,y) ;
-            int idx = x * Board::SIZE + y ;
+    for (int x = 0; x < Board::SIZE; ++x) {
+        for (int y = 0; y < Board::SIZE; ++y) {
+            Stone s = board.get(x, y);
+            int idx = x * Board::SIZE + y;
 
-            if (s == currentPlayer){
-                features[idx] = 1.0f ;
+            if (s == Stone::BLACK) {
+                features[idx] = 1.0f;
             }
 
-            else if(s == oppPlayer){
-                features[planeSize + idx] = 1.0f ;
+            else if (s == Stone::WHITE) {
+                features[planeSize + idx] = 1.0f;
             }
         }
     }
 
-    if (currentPlayer == Stone::BLACK){
-        for (int i = 0 ; i < planeSize ; ++i){
-            features[2 * planeSize + 1] == 1.0f ;
+    if (currentPlayer == Stone::BLACK) {
+        for (int i = 0; i < planeSize; ++i) {
+            features[2 * planeSize + i] = 1.0f;
         }
     }
 
-    return features ;
+    return features;
 }
 
 void DataExtractor::extractDirectory(const std::string& sgfDir, const std::string& outBinPath, int maxFiles){
@@ -102,7 +101,7 @@ bool DataExtractor::extractSingleSGF(const std::string& sgfPath, std::ofstream& 
     for (const Move& move : moves){
         std::vector<float> X = getBoardFeatures(game) ;
 
-        int Y = move.isPass ? 361 : (move.y * Board::SIZE + move.x) ;
+        int Y = move.isPass ? 361 : (move.x * Board::SIZE + move.y);
 
         float Z = 0.0f ;
         if (blackWinFlag != 0.0f) {

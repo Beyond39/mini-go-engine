@@ -7,7 +7,7 @@
 
 class MCTSNode{
 public:
-    MCTSNode(const Game &game ,const Move &move ,MCTSNode* parent, const std::vector<Move>& moves) ;
+    MCTSNode(const Game &game ,const Move &move ,MCTSNode* parent, const std::vector<Move>& moves,double prob = 0.0) ;
 
     Game game ;
     Move move ;
@@ -21,7 +21,9 @@ public:
 
     ~MCTSNode() ;
 
+    double policy_prob;
+
     bool isFullyExpanded() const ;
     bool isLeaf() const ;
-    MCTSNode* getBestUCBChild(double c) const ;
+    MCTSNode* getBestPUCTChild(double c) const ;
 };

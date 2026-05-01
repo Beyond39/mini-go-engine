@@ -9,6 +9,8 @@
 #include <QPen>
 #include <QSizePolicy>
 #include <QtMath>
+#include <QDir>
+#include <QFileInfo>
 
 BoardWidget::BoardWidget(QWidget *parent)
     : QWidget(parent),
@@ -21,6 +23,7 @@ BoardWidget::BoardWidget(QWidget *parent)
     setMinimumSize(650, 650);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     setAttribute(Qt::WA_OpaquePaintEvent);
+    setupSounds();
 }
 
 QSize BoardWidget::sizeHint() const
@@ -150,6 +153,37 @@ void BoardWidget::resignCurrentPlayer(){
     update();
 }
 
+bool BoardWidget::forcePass()
+{
+    if (finished) {
+        return false;
+    }
+
+    Stone playedColor = game.getCurrentPlayer();
+    game.playPass();
+    lastmove = QPoint(-1, -1);
+    update();
+
+    emit passPlayed(playedColor);
+    emit turnChanged(game.getCurrentPlayer());
+
+    checkGameEndAfterPass();
+    return true;
+}
+
+void BoardWidget::checkGameEndAfterPass()
+{
+    const auto& history = game.getHistory();
+    if (history.size() >= 2 &&
+        history[history.size() - 1].isPass &&
+        history[history.size() - 2].isPass) {
+        finished = true;
+        finishText = "双方连续停一手，对局结束";
+        emit gameOver(finishText);
+        update();
+    }
+}
+
 const Game& BoardWidget::getGame() const
 {
     return game;
@@ -211,11 +245,13 @@ void BoardWidget::drawStones(QPainter &painter){
     const qreal step = gridStep();
     const qreal radius = step * 0.46;
 
+    const int totalMoves = (int)game.getHistory().size();
+    const int showLastN = 15;  
+
     for (int x = 0; x < Board::SIZE; ++x) {
         for (int y = 0; y < Board::SIZE; ++y) {
             const Stone stone = board.get(x, y);
 
-            // 关键修复：空位不画
             if (stone != Stone::BLACK && stone != Stone::WHITE) {
                 continue;
             }
@@ -247,18 +283,50 @@ void BoardWidget::drawStones(QPainter &painter){
             painter.setBrush(gradient);
             painter.drawEllipse(center, radius, radius);
 
-            // 最后一手高亮
-            if (lastmove == QPoint(x, y)) {
-                painter.setPen(Qt::NoPen);
-                painter.setBrush(stone == Stone::BLACK
-                                 ? QColor(255, 210, 70)
-                                 : QColor(220, 60, 60));
+            int moveNum = getMoveNumberAt(x, y);
 
-                const qreal markerRadius = qMax(3.0, step * 0.11);
-                painter.drawEllipse(center, markerRadius, markerRadius);
+            if (moveNum > 0 && moveNum > totalMoves - showLastN) {
+                painter.save();
+
+                QFont font = painter.font();
+                font.setBold(true);
+                font.setPixelSize((int)(radius * 0.85));
+                painter.setFont(font);
+
+                // 最新一手用醒目颜色，其余根据黑白棋反色
+                if (moveNum == totalMoves) {
+                    painter.setPen(stone == Stone::BLACK
+                                   ? QColor(255, 220, 80)
+                                   : QColor(210, 40, 40));
+                } else {
+                    painter.setPen(stone == Stone::BLACK ? Qt::white : Qt::black);
+                }
+
+                QRectF textRect(
+                    center.x() - radius,
+                    center.y() - radius,
+                    radius * 2,
+                    radius * 2
+                );
+
+                painter.drawText(textRect, Qt::AlignCenter, QString::number(moveNum));
+
+                painter.restore();
             }
 
-            painter.restore();
+
+            // 最后一手高亮
+            if (lastmove == QPoint(x, y)) {
+                painter.setBrush(Qt::NoBrush);
+                painter.setPen(QPen(QColor(45, 91, 150), qMax(2.0, step * 0.065)));
+                painter.drawEllipse(center, radius * 0.68, radius * 0.68);
+
+                painter.setPen(Qt::NoPen);
+                painter.setBrush(QColor(209, 89, 65));
+                painter.drawEllipse(center, qMax(2.6, step * 0.075), qMax(2.6, step * 0.075));
+            }
+            
+            painter.restore() ;
         }
     }
 }
@@ -355,6 +423,7 @@ void BoardWidget::mousePressEvent(QMouseEvent *event){
     if (game.playMove(x, y)) {
         lastmove = QPoint(x, y);
         update();
+        playStoneSound();
         emit movePlayed(x, y, playedColor);
         emit turnChanged(game.getCurrentPlayer());
     } 
@@ -379,4 +448,76 @@ void BoardWidget::setAIEnabled(bool Enabled){
 
 void BoardWidget::setAIcolor(Stone color){
     aicolor = color ;
+}
+
+
+int BoardWidget::getMoveNumberAt(int x, int y) const
+{
+    const std::vector<RecordMove>& history = game.getHistory();
+
+    for (int i = (int)history.size() - 1; i >= 0; --i) {
+        const RecordMove& record = history[i];
+
+        if (record.isPass) {
+            continue;
+        }
+
+        if (record.x == x && record.y == y) {
+            return i + 1;
+        }
+    }
+
+    return 0;
+}
+
+bool BoardWidget::forcePlayMove(int x, int y)
+{
+    if (finished) {
+        return false;
+    }
+
+    Stone color = game.getCurrentPlayer();
+
+    if (!game.playMove(x, y)) {
+        emit illegalAction("AI 返回了非法落点");
+        return false;
+    }
+
+    lastmove = QPoint(x, y);
+    update();
+    playStoneSound();
+
+    emit movePlayed(x, y, color);
+    emit turnChanged(game.getCurrentPlayer());
+    return true;
+}
+
+void BoardWidget::setupSounds()
+{
+    stoneSound = new QSoundEffect(this);
+
+    QString projectRoot = QDir::currentPath();
+    QString soundPath = projectRoot + "/assets/sounds/stone.wav";
+
+    if (!QFileInfo::exists(soundPath)) {
+        QString appDir = QCoreApplication::applicationDirPath();
+        QDir dir(appDir);
+        dir.cdUp();
+        soundPath = dir.filePath("assets/sounds/stone.wav");
+    }
+
+    stoneSound->setSource(QUrl::fromLocalFile(soundPath));
+    stoneSound->setVolume(0.45f);
+
+    qDebug() << "stone sound path:" << soundPath;
+}
+
+void BoardWidget::playStoneSound()
+{
+    if (!stoneSound) {
+        return;
+    }
+
+    stoneSound->stop();
+    stoneSound->play();
 }

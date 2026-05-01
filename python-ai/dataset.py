@@ -1,5 +1,4 @@
 from pathlib import Path
-import struct
 import numpy as np 
 import torch
 from torch.utils.data import Dataset
@@ -39,17 +38,20 @@ class GoBinDataset(Dataset):
             f.seek(offset)
 
             x_bytes = f.read(self.FEATURE_SIZE * 4)
-            x = struct.unpack(f"{self.FEATURE_SIZE}f", x_bytes)
-            x = torch.tensor(x, dtype=torch.float32).view(
-                self.CHANNELS, self.BOARD_SIZE, self.BOARD_SIZE
-            )
+            if len(x_bytes) != self.FEATURE_SIZE * 4:
+                raise EOFError(f"Unexpected EOF while reading features at index {idx}")
+            x_np = np.frombuffer(x_bytes, dtype=np.float32).copy()
+            x = torch.from_numpy(x_np).view(self.CHANNELS, self.BOARD_SIZE, self.BOARD_SIZE)
 
             y_bytes = f.read(4)
-            y = struct.unpack("i", y_bytes)[0]
-            y = torch.tensor(y, dtype=torch.long)
+            if len(y_bytes) != 4:
+                raise EOFError(f"Unexpected EOF while reading policy label at index {idx}")
+            y = int(np.frombuffer(y_bytes, dtype=np.int32)[0])
 
             z_bytes = f.read(4)
-            z = struct.unpack("f", z_bytes)[0]
-            z = torch.tensor(z, dtype=torch.float32)
+            if len(z_bytes) != 4:
+                raise EOFError(f"Unexpected EOF while reading value label at index {idx}")
+            z = float(np.frombuffer(z_bytes, dtype=np.float32)[0])
 
-        return x, y, z
+        return x.float(), torch.tensor(y, dtype=torch.long), torch.tensor(z, dtype=torch.float32)
+

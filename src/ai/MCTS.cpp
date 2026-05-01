@@ -3,6 +3,7 @@
 #include "../core/Board.h" 
 
 #include <algorithm>
+#include <cmath>
 
 MCTS::MCTS(int iter, PythonEvaluator* eval)
     : iteration(iter),
@@ -42,17 +43,15 @@ std::vector<Move> MCTS::getproperMoves(const Game &game){
     std::vector<std::pair<int,int>> points = board.getLegalMoves(player) ;
 
     const std::vector<RecordMove>& history = game.getHistory();
-    bool earlyOpening = (history.size() < 2);
 
     for (auto it : points){
         int x = it.first;
         int y = it.second;
-        
-        if (!earlyOpening){
-            if (!hasNearbyStone(board, x, y, 2)) {
-                continue;
-            }
+
+        if (game.isKo(x, y, player)) {
+            continue;
         }
+
         Move move ;
         move.x = it.first ;
         move.y = it.second ;
@@ -62,16 +61,6 @@ std::vector<Move> MCTS::getproperMoves(const Game &game){
         moves.push_back(move) ;
     }
 
-    if (moves.empty()){
-        for (auto it : points) {
-            Move move;
-            move.x = it.first;
-            move.y = it.second;
-            move.stone = player;
-            move.isPass = false;
-            moves.push_back(move);
-        }
-    }
     Move passMove;
     passMove.x = -1;
     passMove.y = -1;
@@ -112,23 +101,21 @@ bool MCTS::isTerminal(const Game &game){
     return false ;
 }
 
-double MCTS::evaluate(const Game &game , Stone currentPlayer){
+double MCTS::evaluate(const Game &game , Stone rootPlayer){
     const Board& board = game.getBoard() ;
 
-    int blackStones = 0 ;
-    int whiteStones = 0 ;
-    int blackTerritory = 0 ;
-    int whiteTerritory = 0 ; 
+    double blackScore = 0.0;
+    double whiteScore = 6.5;
 
     for (int x = 0 ; x < Board::SIZE ; ++x){
         for (int y = 0 ; y < Board::SIZE ; ++y){
             Stone s = board.get(x,y) ;
 
             if (s == Stone::BLACK) {
-                    blackStones++;
-                }
+                blackScore += 1.0;
+            }
             else if (s == Stone::WHITE) {
-                whiteStones++;
+                whiteScore += 1.0;
             }
             else {
                 bool nearBlack = false;
@@ -146,41 +133,28 @@ double MCTS::evaluate(const Game &game , Stone currentPlayer){
                     }
 
                     Stone ns = board.get(nx, ny);
-
                     if (ns == Stone::BLACK) {
                         nearBlack = true;
-                    }
-                    else if (ns == Stone::WHITE) {
+                    } else if (ns == Stone::WHITE) {
                         nearWhite = true;
                     }
                 }
 
                 if (nearBlack && !nearWhite) {
-                    blackTerritory++;
-                }
-                else if (nearWhite && !nearBlack) {
-                    whiteTerritory++;
+                    blackScore += 0.35;
+                } else if (nearWhite && !nearBlack) {
+                    whiteScore += 0.35;
                 }
             }
         }
     }
-
-    double blackScore = blackStones * 1.0 + blackTerritory * 2.5;
-    double whiteScore = whiteStones * 1.0 + whiteTerritory * 2.5;
-
     double score = blackScore - whiteScore;
-
-    if (currentPlayer == Stone::BLACK) {
-        return score;
-    } 
-    else {
-        return -score;
-    }
+    return rootPlayer == Stone::BLACK ? score : -score;
 }
 
 MCTSNode* MCTS::selectNode(MCTSNode* node)
 {
-    while (!isTerminal(node->game)) {
+    while (node && !isTerminal(node->game)) {
         if (!node->isFullyExpanded()) {
             return node;
         }
@@ -189,7 +163,7 @@ MCTSNode* MCTS::selectNode(MCTSNode* node)
             return node;
         }
 
-        node = node->getBestUCBChild(1.414);
+        node = node->getBestPUCTChild(1.5);
 
         if (node == nullptr) {
             break;
@@ -213,33 +187,21 @@ MCTSNode* MCTS::expandNode(MCTSNode* node){
 
     Game nextgame = node->game ;
 
-    if (move.isPass){
-        nextgame.playPass() ;
-    }
-    else{
-        nextgame.playMove(move.x,move.y) ;
+    const bool ok = move.isPass ? nextgame.playPass() : nextgame.playMove(move.x, move.y);
+    if (!ok) {
+        return node;
     }
 
-    MCTSNode* child = new MCTSNode(nextgame, move, node, getproperMoves(nextgame)) ;
-    node->children.push_back(child) ;
+    const double prior = 1.0;
 
-    return child ;
+    MCTSNode* child = new MCTSNode(nextgame, move, node, getproperMoves(nextgame), prior);
+    node->children.push_back(child);
+
+    return child;
 }
 
-double MCTS::simulate(Game& gameState, Stone currentPlayer)
-{
-    if (evaluator != nullptr) {
-        EvaluationResult result = evaluator->evaluate(
-            gameState.getBoard(),
-            static_cast<int>(currentPlayer)
-        );
-
-        if (result.valid) {
-            return static_cast<double>(result.value);
-        }
-    }
-
-    return evaluate(gameState, currentPlayer);
+double MCTS::simulate(Game& gameState, Stone rootPlayer){
+    return evaluate(gameState, rootPlayer) / 50.0;
 }
 
 void MCTS::backpropagate(MCTSNode* node , double result){
@@ -254,62 +216,69 @@ Move MCTS::getbestMove(const Game &game){
     Move dummyMove ;
     dummyMove.x = -1 ;
     dummyMove.y = -1 ;
-    dummyMove.isPass = false ;
+    dummyMove.isPass = true ;
     dummyMove.stone = Stone::EMPTY ;
 
     std::vector<Move> rootMoves = getproperMoves(game) ;
 
     if (evaluator) {
-        int currentPlayerInt = (game.getCurrentPlayer() == Stone::BLACK) ? 1 : 2;
-
-        EvaluationResult evalResult = evaluator->evaluate(game.getBoard(), currentPlayerInt);
+        const int currentPlayerInt = (game.getCurrentPlayer() == Stone::BLACK) ? 1 : 2;
+        const EvaluationResult evalResult = evaluator->evaluate(game.getBoard(), currentPlayerInt);
 
         if (evalResult.valid && evalResult.policy.size() == 362) {
             rootMoves = sortMovesByPolicy(rootMoves, evalResult.policy);
 
-            int keepTopK = 20;  
-            if ((int)rootMoves.size() > keepTopK) {
+            const int keepTopK = 30;
+            if (static_cast<int>(rootMoves.size()) > keepTopK) {
                 rootMoves.resize(keepTopK);
             }
         }
     }
 
-    if (rootMoves.empty()){
-        return dummyMove ;
+    if (rootMoves.empty()) {
+        return dummyMove;
     }
 
-    MCTSNode* root = new MCTSNode(game, dummyMove, nullptr , rootMoves) ;
-    Stone currentPlayer = game.getCurrentPlayer() ;
+    MCTSNode* root = new MCTSNode(game, dummyMove, nullptr, rootMoves, 1.0);
+    const Stone rootPlayer = game.getCurrentPlayer();
 
-    for (int i = 0 ; i < iteration ; ++i){
-        MCTSNode* node = selectNode(root) ;
-
-        if (node == nullptr){
-            continue; 
+    for (int i = 0; i < iteration; ++i) {
+        MCTSNode* node = selectNode(root);
+        if (node == nullptr) {
+            continue;
         }
 
-        if (!isTerminal(node->game) && !node->isFullyExpanded()){
-            node = expandNode(node) ;
+        if (!isTerminal(node->game) && !node->isFullyExpanded()) {
+            node = expandNode(node);
         }
 
-        double result = simulate(node->game ,currentPlayer) ;
-        backpropagate(node,result) ;
+        if (node == nullptr) {
+            continue;
+        }
+
+        double result = simulate(node->game, rootPlayer);
+        backpropagate(node, result);
     }
 
-    MCTSNode* bestChild = nullptr ;
-    int maxVisits = -1 ;
+    MCTSNode* bestChild = nullptr;
+    int maxVisits = -1;
 
-    for (MCTSNode* child : root->children){
-        if (child->visits > maxVisits){
-            maxVisits = child->visits ;
-            bestChild = child ;
+    for (MCTSNode* child : root->children) {
+        if (child && child->visits > maxVisits) {
+            maxVisits = child->visits;
+            bestChild = child;
         }
     }
 
-    Move bestMove =  bestChild ? bestChild->move : dummyMove ;
+    Move bestMove;
+    if (bestChild) {
+        bestMove = bestChild->move;
+    } else {
+        bestMove = rootMoves.front();
+    }
 
-    delete root ;
-    return bestMove ;
+    delete root;
+    return bestMove;
 }
 
 int MCTS::moveToPolicyIndex(const Move& move) const

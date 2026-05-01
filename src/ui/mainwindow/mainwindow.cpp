@@ -55,13 +55,10 @@ void MainWindow::setupConnections(){
         stackedWidget->setCurrentWidget(gamepage);
     });
 
-    connect(homepage, &HomePage::startAIGameRequested, this, [=]() {
+   connect(homepage, &HomePage::sgfSelected, this, [this](const QString& path) {
+        gamepage->setAIMode(false, Stone::WHITE);
         stackedWidget->setCurrentWidget(gamepage);
-    });
-
-    connect(homepage, &HomePage::sgfSelected , this ,[=](const QString& path){
-        stackedWidget->setCurrentWidget(gamepage) ;
-        gamepage->loadSGFFile(path) ; 
+        gamepage->loadSGFFile(path);
     });
 
     connect(gamepage, &GamePage::backToHomeRequested, this, [=]() {

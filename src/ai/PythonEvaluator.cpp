@@ -1,10 +1,8 @@
 #include "PythonEvaluator.h"
-#include "BoardSerializer.h"
 
-#include <QDir>
-#include <QFile>
-#include <QProcess>
-#include <QTemporaryDir>
+#include <QDebug>
+#include <QElapsedTimer>
+#include <QFileInfo>
 #include <QStringList>
 
 PythonEvaluator::PythonEvaluator(const QString& pythonExe, const QString& scriptPath, const QString& modelPath)
@@ -15,15 +13,28 @@ PythonEvaluator::PythonEvaluator(const QString& pythonExe, const QString& script
 {
 }
 
-PythonEvaluator::~PythonEvaluator()
-{
+PythonEvaluator::~PythonEvaluator(){
     stop();
 }
 
-bool PythonEvaluator::start()
-{
-    if (process != nullptr) {
+bool PythonEvaluator::start(){
+    if (process != nullptr && process->state() == QProcess::Running) {
         return true;
+    }
+
+    if (!QFileInfo::exists(pythonExe)) {
+        qDebug() << "Python 解释器不存在:" << pythonExe;
+        return false;
+    }
+
+    if (!QFileInfo::exists(scriptPath)) {
+        qDebug() << "Python 推理脚本不存在:" << scriptPath;
+        return false;
+    }
+
+    if (!QFileInfo::exists(modelPath)) {
+        qDebug() << "模型文件不存在:" << modelPath;
+        return false;
     }
 
     process = new QProcess();
@@ -33,7 +44,7 @@ bool PythonEvaluator::start()
     process->start(pythonExe, args);
 
     if (!process->waitForStarted(5000)) {
-        qDebug() << "Python 进程启动失败";
+        qDebug() << "Python 进程启动失败:" << process->errorString();
         delete process;
         process = nullptr;
         return false;
@@ -43,8 +54,7 @@ bool PythonEvaluator::start()
     return true;
 }
 
-void PythonEvaluator::stop()
-{
+void PythonEvaluator::stop(){
     if (process) {
         process->closeWriteChannel();
         process->terminate();
@@ -59,12 +69,7 @@ void PythonEvaluator::stop()
     }
 }
 
-QString PythonEvaluator::boardToMessage(const Board& board, int currentPlayer) const
-{
-    // 格式：
-    // currentPlayer;361个点（0空1黑2白）
-    // 例如：
-    // 1;0,0,1,2,0,...
+QString PythonEvaluator::boardToMessage(const Board& board, int currentPlayer) const{
     QString msg;
     msg += QString::number(currentPlayer);
     msg += ";";
@@ -76,8 +81,7 @@ QString PythonEvaluator::boardToMessage(const Board& board, int currentPlayer) c
 
             if (s == Stone::BLACK) {
                 v = 1;
-            }
-            else if (s == Stone::WHITE) {
+            } else if (s == Stone::WHITE) {
                 v = 2;
             }
 
@@ -93,20 +97,41 @@ QString PythonEvaluator::boardToMessage(const Board& board, int currentPlayer) c
     return msg;
 }
 
-EvaluationResult PythonEvaluator::evaluate(const Board& board, int currentPlayer)
+QByteArray PythonEvaluator::readLineWithTimeout(int timeoutMs)
 {
-    EvaluationResult result;
-
     if (!process) {
-        qDebug() << "Python 进程未启动";
-        return result;
+        return QByteArray();
     }
 
-    QString message = boardToMessage(board, currentPlayer);
+    QElapsedTimer timer;
+    timer.start();
+
+    while (!process->canReadLine() && timer.elapsed() < timeoutMs) {
+        process->waitForReadyRead(50);
+    }
+
+    if (!process->canReadLine()) {
+        return QByteArray();
+    }
+
+    return process->readLine().trimmed();
+}
+
+EvaluationResult PythonEvaluator::evaluate(const Board& board, int currentPlayer){
+    EvaluationResult result;
+
+    if (!process || process->state() != QProcess::Running) {
+        if (!start()) {
+            return result;
+        }
+    }
+
+    const QString message = boardToMessage(board, currentPlayer);
 
     process->write(message.toUtf8());
     if (!process->waitForBytesWritten(2000)) {
-        qDebug() << "写入 Python 失败";
+        qDebug() << "写入 Python 失败:" << process->errorString();
+        stop();
         return result;
     }
     
@@ -116,30 +141,44 @@ EvaluationResult PythonEvaluator::evaluate(const Board& board, int currentPlayer
         return result;
     }
 
-    QByteArray line1 = process->readLine().trimmed();
+    const QByteArray line1 = readLineWithTimeout(20000);
+    if (line1.isEmpty()) {
+        qDebug() << "等待 value 超时或 Python 已退出";
+        qDebug() << process->readAllStandardError();
+        stop();
+        return result;
+    }
+
     bool ok = false;
-    float value = QString::fromUtf8(line1).toFloat(&ok);
+    const float value = QString::fromUtf8(line1).toFloat(&ok);
     if (!ok) {
         qDebug() << "value 解析失败:" << line1;
         qDebug() << process->readAllStandardError();
+        stop();
         return result;
     }
 
-    if (!process->waitForReadyRead(5000)) {
-        qDebug() << "等待 policy 超时";
+    const QByteArray line2 = readLineWithTimeout(20000);
+    if (line2.isEmpty()) {
+        qDebug() << "等待 policy 超时或 Python 已退出";
+        qDebug() << process->readAllStandardError();
+        stop();
+        return result;
+    }
+
+    const QList<QByteArray> parts = line2.split(' ');
+    if (parts.size() != 362) {
+        qDebug() << "policy 长度异常:" << parts.size();
         qDebug() << process->readAllStandardError();
         return result;
     }
-
-    QByteArray line2 = process->readLine().trimmed();
-    QList<QByteArray> parts = line2.split(' ');
 
     std::vector<float> policy;
     policy.reserve(parts.size());
 
     for (const QByteArray& p : parts) {
         bool ok2 = false;
-        float prob = QString::fromUtf8(p).toFloat(&ok2);
+        const float prob = QString::fromUtf8(p).toFloat(&ok2);
         if (!ok2) {
             qDebug() << "policy 解析失败:" << p;
             return result;
@@ -153,3 +192,4 @@ EvaluationResult PythonEvaluator::evaluate(const Board& board, int currentPlayer
 
     return result;
 }
+ 
