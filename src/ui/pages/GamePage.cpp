@@ -80,6 +80,9 @@ GamePage::GamePage(QWidget *parent)
             message = "AI 选择停一手";
         } else {
             applied = game.playMove(aiMove.x, aiMove.y);
+            if (applied) {
+                boardwidget->playStoneSound();
+            }
             message = QString("AI 落子：%1").arg(moveToString(aiMove.x, aiMove.y));
         }
 

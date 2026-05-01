@@ -28,6 +28,7 @@ public:
     int getMoveNumberAt(int x, int y) const;
     bool forcePlayMove(int x, int y) ;
     bool forcePass();
+    void playStoneSound();
 
 public slots:
     void undoLastMove();
@@ -74,5 +75,4 @@ private:
     void checkGameEndAfterPass();
 
     void setupSounds();
-    void playStoneSound();
 } ;
