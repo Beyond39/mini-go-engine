@@ -3,7 +3,7 @@
 #include <QWidget>
 #include <QVector>
 
-// [改进] 独立胜率曲线控件：GamePage 不再用占位 QFrame，而是用 QPainter 真实绘制曲线。
+// 独立胜率曲线控件：GamePage 不再用占位 QFrame，而是用 QPainter 真实绘制曲线。
 class WinRateChartWidget : public QWidget
 {
     Q_OBJECT

@@ -80,7 +80,7 @@ void WinRateChartWidget::paintEvent(QPaintEvent* event)
     const QRectF outer = rect().adjusted(2, 2, -2, -2);
     const QRectF plotRect = outer.adjusted(44, 24, -16, -30);
 
-    // [改进] 使用实色背景，避免默认控件透明叠加导致“脏色”。
+    // 使用实色背景，避免默认控件透明叠加导致“脏色”。
     painter.setPen(QPen(QColor(211, 200, 186), 1.0));
     painter.setBrush(QColor(255, 253, 248));
     painter.drawRoundedRect(outer, 10, 10);
@@ -122,7 +122,7 @@ void WinRateChartWidget::paintEvent(QPaintEvent* event)
         path.lineTo(pointForIndex(i, plotRect));
     }
 
-    // [改进] 曲线用清晰的深蓝色实线，不用半透明颜色。
+    // 曲线用清晰的深蓝色实线，不用半透明颜色。
     painter.setPen(QPen(QColor(45, 91, 150), 2.4, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
     painter.setBrush(Qt::NoBrush);
     painter.drawPath(path);

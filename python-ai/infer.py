@@ -28,7 +28,6 @@ def board_to_tensor(board: np.ndarray, current_player: int):
 
     # 通道2：当前轮到谁
     # 这里一定要和你训练时保持一致
-    # 如果你训练时是“轮到黑则全1，轮到白则全0”，那就这样写
     if current_player == 1:
         x[2][:] = 1.0
     else:
