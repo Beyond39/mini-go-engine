@@ -3,11 +3,9 @@
 #include <iostream>
 #include <filesystem>
 
-int main()
-{
+int main(){
     namespace fs = std::filesystem;
 
-    // 这里建议你按自己项目根目录来写
     const std::string projectRoot = "E:/vscode-code/GoEngine";
 
     const std::string filelistDir = projectRoot + "/data/filelists";
