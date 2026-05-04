@@ -8,7 +8,7 @@ class QListWidget;
 class QPushButton;
 class BoardWidget;
 
-// [改进] 对局研究窗口：复制当前局面用于试下，不会污染主对局。
+// 对局研究窗口：复制当前局面用于试下，不会污染主对局。
 class ReviewDialog : public QDialog
 {
     Q_OBJECT
